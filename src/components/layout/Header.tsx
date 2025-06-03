@@ -1,6 +1,7 @@
 
 "use client";
 
+import React from 'react'; // Ensure React is imported first
 import Link from 'next/link';
 import { ShoppingCart, User, LogIn, Menu, PackageSearch, LogOut, X as CloseIcon, ChevronDown } from 'lucide-react';
 import { Logo } from '@/components/shared/Logo';
@@ -16,8 +17,9 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react'; // Separate from default React import
 import { useRouter } from 'next/navigation';
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from '@/lib/supabaseClient';
@@ -29,7 +31,7 @@ const mainNavLinks = [
 ];
 
 const categoryNavLinks = [
-  { href: '/category/laptops', label: 'Laptops' },
+  { href: '/products', label: 'All Products' },
   { href: '/category/keyboards', label: 'Keyboards' },
   { href: '/category/mice', label: 'Mice' },
   { href: '/category/mobile-chargers', label: 'Chargers' },
@@ -184,12 +186,15 @@ export function Header() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
-              {categoryNavLinks.map(link => (
-                <DropdownMenuItem key={link.href} asChild>
-                  <Link href={link.href} className="w-full">
-                    {link.label}
-                  </Link>
-                </DropdownMenuItem>
+              {categoryNavLinks.map((link, index) => (
+                <React.Fragment key={link.href}>
+                  {link.label === "All Products" && index > 0 && <DropdownMenuSeparator />}
+                  <DropdownMenuItem asChild>
+                    <Link href={link.href} className="w-full">
+                      {link.label}
+                    </Link>
+                  </DropdownMenuItem>
+                </React.Fragment>
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
@@ -320,5 +325,3 @@ export function Header() {
     </header>
   );
 }
-
-    
