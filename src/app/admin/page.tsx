@@ -2,8 +2,10 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { PackagePlus, ListOrdered, Settings } from "lucide-react";
+import { PackagePlus, ListOrdered, Settings, Users, LayoutGrid } from "lucide-react";
 import type { Metadata } from 'next';
+import { products, getAllOrders } from "@/lib/data"; // Import mock data
+import type { Order } from "@/lib/types";
 
 export const metadata: Metadata = {
   title: 'Admin Panel | TechGear',
@@ -14,6 +16,15 @@ export const metadata: Metadata = {
 const isAdmin = true; 
 
 export default function AdminPage() {
+  const totalProducts = products.length;
+  const allOrders = getAllOrders();
+  const totalOrders = allOrders.length;
+  
+  const orderStatusCounts = allOrders.reduce((acc, order) => {
+    acc[order.status] = (acc[order.status] || 0) + 1;
+    return acc;
+  }, {} as Record<Order['status'], number>);
+
 
   if (!isAdmin) {
     return (
@@ -56,12 +67,38 @@ export default function AdminPage() {
           </CardHeader>
           <CardContent>
              <Link href="/admin/orders">
-                <Button className="w-full" variant="outline" disabled>Manage Orders (Coming Soon)</Button>
+                <Button className="w-full">Manage Orders</Button>
              </Link>
           </CardContent>
         </Card>
+        
+        <Card className="hover:shadow-lg transition-shadow opacity-50 cursor-not-allowed">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Users className="h-6 w-6 text-primary" />
+              User Management
+            </CardTitle>
+            <CardDescription>View and manage user accounts.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button className="w-full" variant="outline" disabled>Manage Users (Coming Soon)</Button>
+          </CardContent>
+        </Card>
 
-        <Card className="hover:shadow-lg transition-shadow">
+        <Card className="hover:shadow-lg transition-shadow opacity-50 cursor-not-allowed">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <LayoutGrid className="h-6 w-6 text-primary" />
+             Category Management
+            </CardTitle>
+            <CardDescription>Add, edit, or delete categories.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button className="w-full" variant="outline" disabled>Manage Categories (Coming Soon)</Button>
+          </CardContent>
+        </Card>
+
+        <Card className="hover:shadow-lg transition-shadow opacity-50 cursor-not-allowed">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Settings className="h-6 w-6 text-primary" />
@@ -74,13 +111,13 @@ export default function AdminPage() {
           </CardContent>
         </Card>
       </div>
-      <div className="mt-8 p-4 bg-secondary/50 rounded-lg">
-        <h2 className="text-xl font-semibold mb-2">Quick Stats (Placeholder)</h2>
+      <div className="mt-8 p-6 bg-card rounded-lg shadow">
+        <h2 className="text-xl font-semibold mb-4 font-headline">Store Overview</h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-            <div><p className="text-2xl font-bold">10</p><p className="text-sm text-muted-foreground">Total Products</p></div>
-            <div><p className="text-2xl font-bold">58</p><p className="text-sm text-muted-foreground">Pending Orders</p></div>
-            <div><p className="text-2xl font-bold">₹56,700</p><p className="text-sm text-muted-foreground">Revenue (Month)</p></div>
-            <div><p className="text-2xl font-bold">350</p><p className="text-sm text-muted-foreground">Registered Users</p></div>
+            <div><p className="text-3xl font-bold">{totalProducts}</p><p className="text-sm text-muted-foreground">Total Products</p></div>
+            <div><p className="text-3xl font-bold">{totalOrders}</p><p className="text-sm text-muted-foreground">Total Orders</p></div>
+            <div><p className="text-3xl font-bold">{orderStatusCounts['Pending'] || 0}</p><p className="text-sm text-muted-foreground">Pending Orders</p></div>
+            <div><p className="text-3xl font-bold">{orderStatusCounts['Delivered'] || 0}</p><p className="text-sm text-muted-foreground">Completed Orders</p></div>
         </div>
       </div>
     </div>

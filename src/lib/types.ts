@@ -35,12 +35,15 @@ export interface ShippingAddress {
   country: string;
 }
 
+export type OrderStatus = 'Pending' | 'Processing' | 'Shipped' | 'Delivered' | 'Cancelled';
+
 export interface Order {
   id: string;
   userId: string; // Assuming user context, can be anonymous for now
+  userEmail?: string; // Added for admin display
   items: CartItem[];
   totalAmount: number;
-  status: 'Pending' | 'Processing' | 'Shipped' | 'Delivered' | 'Cancelled';
+  status: OrderStatus;
   orderDate: string; // ISO string
   shippingAddress: ShippingAddress;
   paymentMethod: 'COD';
@@ -53,3 +56,4 @@ export interface User {
   role: 'user' | 'admin';
   // password will not be stored on client models
 }
+

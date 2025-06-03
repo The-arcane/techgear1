@@ -1,5 +1,5 @@
 
-import type { Category, Product } from './types';
+import type { Category, Product, Order, OrderStatus } from './types';
 
 export const categories: Category[] = [
   {
@@ -149,6 +149,48 @@ export const products: Product[] = [
   }
 ];
 
+export const orders: Order[] = [
+  { 
+    id: "TG-123456", userId: "user1", userEmail: "customer1@example.com",
+    items: [{ productId: "logitech-mx-master-3", name: "Logitech MX Master 3 Mouse", price: 7999, quantity: 1, image: "https://placehold.co/600x400.png", stock: 10 }], 
+    totalAmount: 7999, status: "Delivered", orderDate: new Date(Date.now() - 1000*60*60*24*5).toISOString(),
+    shippingAddress: { fullName: "John Doe", address: "123 Main St", city: "Anytown", postalCode: "12345", country: "India"},
+    paymentMethod: "COD"
+  },
+  { 
+    id: "TG-789012", userId: "user1", userEmail: "customer1@example.com",
+    items: [
+      { productId: "apple-magic-keyboard", name: "Apple Magic Keyboard", price: 9500, quantity: 1, image: "https://placehold.co/600x400.png", stock: 10 },
+      { productId: "anker-usbc-charger", name: "Anker USB-C Charger", price: 1299, quantity: 1, image: "https://placehold.co/600x400.png", stock: 10 }
+    ], 
+    totalAmount: 10799, status: "Shipped", orderDate: new Date(Date.now() - 1000*60*60*24*2).toISOString(),
+    shippingAddress: { fullName: "John Doe", address: "123 Main St", city: "Anytown", postalCode: "12345", country: "India"},
+    paymentMethod: "COD"
+  },
+  { 
+    id: "TG-345678", userId: "user2", userEmail: "another.user@example.com",
+    items: [{ productId: "samsung-galaxy-buds-pro", name: "Samsung Galaxy Buds Pro", price: 11499, quantity: 1, image: "https://placehold.co/600x400.png", stock: 10 }], 
+    totalAmount: 11499, status: "Processing", orderDate: new Date(Date.now() - 1000*60*60*24*1).toISOString(),
+    shippingAddress: { fullName: "Jane Smith", address: "456 Oak Ave", city: "Otherville", postalCode: "67890", country: "India"},
+    paymentMethod: "COD"
+  },
+  { 
+    id: "TG-901234", userId: "user3", userEmail: "test.shopper@example.com",
+    items: [{ productId: "razer-blackwidow-keyboard", name: "Razer BlackWidow Keyboard", price: 8499, quantity: 1, image: "https://placehold.co/600x400.png", stock: 10 }], 
+    totalAmount: 8499, status: "Pending", orderDate: new Date(Date.now() - 1000*60*30).toISOString(), // 30 mins ago
+    shippingAddress: { fullName: "Test Shopper", address: "789 Pine Rd", city: "Testburg", postalCode: "54321", country: "India"},
+    paymentMethod: "COD"
+  },
+   { 
+    id: "TG-567890", userId: "user1", userEmail: "customer1@example.com",
+    items: [{ productId: "dell-laptop-sleeve", name: "Dell Inspiron Laptop Sleeve", price: 1199, quantity: 2, image: "https://placehold.co/600x400.png", stock: 10 }], 
+    totalAmount: 2398, status: "Cancelled", orderDate: new Date(Date.now() - 1000*60*60*24*10).toISOString(), 
+    shippingAddress: { fullName: "John Doe", address: "123 Main St", city: "Anytown", postalCode: "12345", country: "India"},
+    paymentMethod: "COD"
+  },
+];
+
+
 export const getProductsByCategory = (categorySlug: string): Product[] => {
   return products.filter(product => product.categorySlug === categorySlug);
 };
@@ -159,4 +201,30 @@ export const getProductById = (productId: string): Product | undefined => {
 
 export const getCategoryBySlug = (slug: string): Category | undefined => {
   return categories.find(category => category.slug === slug);
+};
+
+// Mock function to get all orders (for admin)
+export const getAllOrders = (): Order[] => {
+  return orders;
+};
+
+// Mock function to get orders for a specific user
+export const getUserOrders = (userId: string): Order[] => {
+  return orders.filter(order => order.userId === userId);
+};
+
+// Mock function to get a specific order by ID
+export const getOrderById = (orderId: string): Order | undefined => {
+  return orders.find(order => order.id === orderId);
+};
+
+// Mock function to update order status (simulated)
+export const updateOrderStatus = (orderId: string, status: OrderStatus): boolean => {
+  const orderIndex = orders.findIndex(order => order.id === orderId);
+  if (orderIndex !== -1) {
+    orders[orderIndex].status = status;
+    console.log(`Order ${orderId} status updated to ${status} (mock)`);
+    return true; // Simulate success
+  }
+  return false; // Simulate failure (order not found)
 };
