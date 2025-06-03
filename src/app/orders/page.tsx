@@ -6,7 +6,7 @@ import Link from "next/link";
 import { ShoppingBag, AlertTriangle } from "lucide-react";
 import type { Order, OrderStatus, SupabaseOrderFetched } from "@/lib/types"; 
 import type { Metadata } from 'next';
-import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
+import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import type { Database } from '@/lib/database.types';
@@ -17,14 +17,18 @@ export const metadata: Metadata = {
 };
 
 export default async function OrdersPage() {
-  const cookieStore = cookies(); // Keep this to log all cookies
+  const cookieStore = cookies();
   console.log('[OrdersPage] All cookies visible to server component:', JSON.stringify(cookieStore.getAll(), null, 2));
   
-  const supabase = createServerComponentClient<Database>(
-    { cookies }, // Pass the cookies function directly
+  const supabase = createServerClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
-      supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      supabaseKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value
+        },
+      },
     }
   );
 

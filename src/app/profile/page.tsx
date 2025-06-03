@@ -1,5 +1,5 @@
 
-import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
+import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
@@ -16,14 +16,18 @@ export const metadata: Metadata = {
 };
 
 export default async function ProfilePage() {
-  const cookieStore = cookies(); // Keep this to log all cookies
+  const cookieStore = cookies();
   console.log('[ProfilePage] All cookies visible to server component:', JSON.stringify(cookieStore.getAll(), null, 2));
 
-  const supabase = createServerComponentClient<Database>(
-    { cookies }, // Pass the cookies function directly
+  const supabase = createServerClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
-      supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      supabaseKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value
+        },
+      },
     }
   );
 

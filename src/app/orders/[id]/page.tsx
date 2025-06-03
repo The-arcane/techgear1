@@ -7,7 +7,7 @@ import { ArrowLeft, Package, MapPin, CreditCard, ShoppingCart, AlertTriangle } f
 import Image from 'next/image';
 import Link from 'next/link';
 import type { Metadata } from 'next';
-import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
+import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import type { Database } from '@/lib/database.types';
@@ -17,11 +17,16 @@ type UserOrderDetailPageProps = {
 };
 
 async function getOrderDetailsFromSupabase(orderIdNum: number, userId: string): Promise<Order | null> {
-  const supabase = createServerComponentClient<Database>(
-    { cookies }, // Pass cookies function directly
+  const cookieStore = cookies();
+  const supabase = createServerClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
-      supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      supabaseKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value
+        },
+      },
     }
   );
   console.log(`[getOrderDetailsFromSupabase] Fetching order ID: ${orderIdNum} for user ID: ${userId}`);
@@ -88,11 +93,16 @@ async function getOrderDetailsFromSupabase(orderIdNum: number, userId: string): 
 
 
 export async function generateMetadata({ params }: UserOrderDetailPageProps): Promise<Metadata> {
-  const supabase = createServerComponentClient<Database>(
-    { cookies },
+  const cookieStore = cookies();
+  const supabase = createServerClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
-      supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      supabaseKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value
+        },
+      },
     }
   );
   const { data: { user } } = await supabase.auth.getUser();
@@ -123,14 +133,18 @@ export async function generateMetadata({ params }: UserOrderDetailPageProps): Pr
 
 
 export default async function UserOrderDetailPage({ params }: UserOrderDetailPageProps) {
-  const cookieStore = cookies(); // Keep for logging
+  const cookieStore = cookies(); 
   console.log(`[UserOrderDetailPage /orders/${params.id}] All cookies visible to server component:`, JSON.stringify(cookieStore.getAll(), null, 2));
   
-  const supabase = createServerComponentClient<Database>(
-    { cookies }, // Pass cookies function directly
+  const supabase = createServerClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
-      supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      supabaseKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value
+        },
+      },
     }
   );
   
