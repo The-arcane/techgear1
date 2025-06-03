@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useEffect, useRef } from 'react'; // Ensure React is imported first
+import React, { useState, useEffect, useRef } from 'react'; 
 import Link from 'next/link';
 import { ShoppingCart, User, LogIn, Menu, PackageSearch, LogOut, X as CloseIcon, ChevronDown, ListOrdered, UserCircle as UserProfileIcon, Loader2 } from 'lucide-react';
 import { Logo } from '@/components/shared/Logo';
@@ -10,6 +10,8 @@ import { useCart } from '@/contexts/CartContext';
 import {
   Sheet,
   SheetContent,
+  SheetHeader,
+  SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
 import {
@@ -46,15 +48,17 @@ export function Header() {
   const [userName, setUserName] = useState<string | null>(null);
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
   const initialAuthCheckDone = useRef(false);
+  const isMounted = useRef(false);
   
   const router = useRouter();
 
   useEffect(() => {
+    isMounted.current = true;
     console.log("Header: useEffect mounted. isLoadingAuth initially:", isLoadingAuth);
-    setIsLoadingAuth(true); // Set loading true when effect runs
-    initialAuthCheckDone.current = false;
+    // setIsLoadingAuth(true) is already default
 
     const fetchUserDetails = async (user: AuthUser) => {
+      if (!isMounted.current) return;
       try {
         const { data: profileData, error: profileError } = await supabase
           .from('profiles')
@@ -62,7 +66,8 @@ export function Header() {
           .eq('id', user.id)
           .single();
 
-        if (profileError && profileError.code !== 'PGRST116') { // PGRST116 means no row found, which is fine
+        if (!isMounted.current) return;
+        if (profileError && profileError.code !== 'PGRST116') {
           console.error("Header: Error fetching profile:", profileError.message);
         }
         setUserName(profileData?.full_name || user.user_metadata?.full_name || user.email?.split('@')[0] || "User");
@@ -72,7 +77,8 @@ export function Header() {
           .select('id')
           .eq('id', user.id)
           .maybeSingle();
-
+        
+        if (!isMounted.current) return;
         if (adminError) {
           console.error("Header: Error checking admin status:", adminError.message);
           setIsAdminUser(false);
@@ -80,14 +86,15 @@ export function Header() {
           setIsAdminUser(!!adminData);
         }
       } catch (e: any) {
+        if (!isMounted.current) return;
         console.error("Header: Unexpected error in fetchUserDetails:", e.message);
-        setUserName(user.email?.split('@')[0] || "User"); // Fallback
+        setUserName(user.email?.split('@')[0] || "User"); 
         setIsAdminUser(false);
       }
     };
     
-    // Function to handle setting user state and then ensuring loading is false
     const handleUserSession = async (user: AuthUser | null) => {
+      if (!isMounted.current) return;
       setAuthUser(user);
       if (user) {
         await fetchUserDetails(user);
@@ -95,10 +102,11 @@ export function Header() {
         setUserName(null);
         setIsAdminUser(false);
       }
+      // Set loading to false only after the first auth check is done
       if (!initialAuthCheckDone.current) {
         setIsLoadingAuth(false);
         initialAuthCheckDone.current = true;
-        console.log("Header: Initial auth check complete (from handleUserSession), isLoadingAuth set to false.");
+        console.log("Header: Initial auth check complete, isLoadingAuth set to false.");
       }
     };
 
@@ -106,23 +114,40 @@ export function Header() {
     const performInitialAuthSetup = async () => {
       console.log("Header: Performing initial auth setup.");
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        console.log("Header (initial getSession): Session object:", session ? session.user.id : "null");
-        await handleUserSession(session?.user ?? null);
+        // Check if already loading to prevent race conditions if effect re-runs quickly
+        if (isMounted.current && !initialAuthCheckDone.current) {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (isMounted.current) { // Re-check after await
+                 console.log("Header (initial getSession): Session user:", session ? session.user.id : "null");
+                await handleUserSession(session?.user ?? null);
+            }
+        }
       } catch (e:any) {
-        console.error("Header (initial auth setup error):", e.message);
-        await handleUserSession(null); // Ensure loading state is handled even on error
+        if (isMounted.current) {
+            console.error("Header (initial auth setup error):", e.message);
+            await handleUserSession(null); 
+        }
       }
     };
 
     performInitialAuthSetup();
 
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!isMounted.current) return;
       console.log("Header: onAuthStateChange event:", event, "Session user:", session?.user?.id || "null");
-      await handleUserSession(session?.user ?? null);
+      // Don't set isLoadingAuth here, only update user details.
+      // It's handled by initialAuthCheckDone.
+      setAuthUser(session?.user ?? null);
+      if (session?.user) {
+        await fetchUserDetails(session.user);
+      } else {
+        setUserName(null);
+        setIsAdminUser(false);
+      }
     });
 
     return () => {
+      isMounted.current = false;
       console.log("Header: useEffect cleanup. Unsubscribing auth listener.");
       authListener?.subscription.unsubscribe();
     };
@@ -133,14 +158,14 @@ export function Header() {
   const closeMobileMenu = () => setIsMobileMenuOpen(false);
 
   const handleLogout = async () => {
-    setIsLoadingAuth(true); // Show loading during logout process
+    // Don't set isLoadingAuth true here, as it's for initial load state
     const { error } = await supabase.auth.signOut();
-    closeMobileMenu();
+    closeMobileMenu(); // Closes mobile menu first
     if (error) {
       toast({ title: "Logout Failed", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Logged Out", description: "You have been successfully logged out." });
-      // Auth state will be updated by onAuthStateChange, which will also set isLoadingAuth false.
+      // Auth state (authUser, userName, isAdminUser) will be updated by onAuthStateChange
     }
     router.push('/login'); 
     router.refresh(); 
@@ -253,14 +278,17 @@ export function Header() {
                 </Button>
               </SheetTrigger>
               <SheetContent side="right" className="w-[300px] sm:w-[400px] bg-background overflow-y-auto">
-                <div className="p-6">
-                  <div className="mb-6 flex justify-between items-center">
-                    <Logo />
-                     <Button variant="ghost" size="icon" onClick={closeMobileMenu} className="md:hidden">
+                <SheetHeader className="p-6 pb-0 flex flex-row items-center justify-between">
+                   <SheetTitle className="sr-only">Mobile Menu</SheetTitle> {/* Visually hidden title */}
+                   <Logo />
+                   <SheetTrigger asChild>
+                     <Button variant="ghost" size="icon" onClick={closeMobileMenu} className="-mr-2">
                         <CloseIcon className="h-6 w-6" />
                         <span className="sr-only">Close menu</span>
                     </Button>
-                  </div>
+                   </SheetTrigger>
+                </SheetHeader>
+                <div className="p-6 pt-4">
                   <nav className="flex flex-col space-y-2">
                     {mainNavLinks.map(link => (
                       <Link 
@@ -332,4 +360,3 @@ export function Header() {
     </header>
   );
 }
-

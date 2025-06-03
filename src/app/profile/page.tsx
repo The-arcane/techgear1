@@ -11,7 +11,7 @@ import { UserCircle, Mail, Phone, MapPin, Edit3, Save, XCircle, AlertTriangle, L
 import type { SupabaseProfile } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabaseClient'; 
+import { supabase } from '@/lib/supabaseClient';
 import type { User as AuthUser } from '@supabase/supabase-js';
 
 interface ProfileFormData {
@@ -25,81 +25,121 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState<SupabaseProfile | null>(null);
   const [formData, setFormData] = useState<ProfileFormData>({ full_name: '', phone_number: '', address: '' });
   const [isEditing, setIsEditing] = useState(false);
-  const [isLoading, setIsLoading] = useState(true); 
-  const [isSaving, setIsSaving] = useState(false); 
+  const [isLoading, setIsLoading] = useState(true);
+  const [isFetchingProfile, setIsFetchingProfile] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
   const { toast } = useToast();
   const router = useRouter();
-
-  const fetchUserProfileData = async (currentUser: AuthUser) => {
-    console.log("[ProfilePage] fetchUserProfileData called for user:", currentUser.id);
-    setError(null);
-    // setIsLoading(true); // isLoading is already true or managed by onAuthStateChange flow
-    try {
-      const { data, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', currentUser.id)
-        .single<SupabaseProfile>();
-
-      if (profileError && profileError.code !== 'PGRST116') { 
-        throw profileError;
-      }
-      
-      setProfile(data);
-      if (data) {
-        setFormData({
-          full_name: data.full_name || '',
-          phone_number: data.phone_number || '',
-          address: data.address || '',
-        });
-      } else {
-         console.warn(`[ProfilePage] Profile data not found for user ID: ${currentUser.id}. User can create one.`);
-      }
-    } catch (err: any) {
-      console.error("[ProfilePage] Error in fetchUserProfileData:", err);
-      setError(err.message || "Could not fetch your profile data.");
-      setProfile(null); 
-    } finally {
-      console.log("[ProfilePage] fetchUserProfileData finished. Setting isLoading to false.");
-      setIsLoading(false); 
-    }
-  };
+  const isMounted = useRef(false);
 
   useEffect(() => {
-    console.log("[ProfilePage] useEffect mounted. Initial isLoading:", isLoading);
-    // setIsLoading(true) is default state
+    isMounted.current = true;
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
 
-    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log("[ProfilePage] onAuthStateChange event:", event, "Session user:", session?.user?.id || "None");
+  // Effect for handling authentication state
+  useEffect(() => {
+    console.log("[ProfilePage] Auth Effect: Setting up onAuthStateChange listener.");
+    setIsLoading(true); // Start loading when checking auth state
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!isMounted.current) return;
+      console.log("[ProfilePage] Auth Effect: onAuthStateChange event:", event, "Session user:", session?.user?.id || "None");
       const currentUser = session?.user ?? null;
-      
-      setAuthUser(currentUser); 
-
-      if (currentUser) {
-        // If user is found, fetch their profile. isLoading will be set to false
-        // inside fetchUserProfileData's finally block.
-        await fetchUserProfileData(currentUser);
-      } else {
-        // No user session. Clear profile states and set isLoading to false.
+      setAuthUser(currentUser);
+      if (!currentUser) { // If no user, stop overall loading and prepare for redirect
         setProfile(null);
         setFormData({ full_name: '', phone_number: '', address: '' });
         setIsEditing(false);
-        setError(null); 
-        setIsLoading(false); // Crucial: set loading false as there's no user to fetch data for.
-        
-        console.log(`[ProfilePage] No user session (event: ${event}). Redirecting to login.`);
-        router.push('/login?message=Please login to view your profile.&source=profilepage_authchange_nouser');
+        setIsLoading(false);
       }
+      // If there is a user, data fetching effect will handle its loading state
+    });
+
+    // Check initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+        if (!isMounted.current) return;
+        console.log("[ProfilePage] Auth Effect: Initial getSession. User:", session?.user?.id || "None");
+        const currentUser = session?.user ?? null;
+        setAuthUser(currentUser);
+        if (!currentUser) {
+            setIsLoading(false); // No user from initial session, stop loading
+        }
+    }).catch(err => {
+        if (!isMounted.current) return;
+        console.error("[ProfilePage] Auth Effect: Error in initial getSession:", err);
+        setAuthUser(null);
+        setIsLoading(false); // Error, stop loading
     });
 
     return () => {
       authListener.subscription.unsubscribe();
-      console.log("[ProfilePage] useEffect cleanup. Unsubscribed auth listener.");
+      console.log("[ProfilePage] Auth Effect: Unsubscribed auth listener.");
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [router]); 
+  }, []);
+
+  // Effect for fetching profile data when authUser is available
+  useEffect(() => {
+    const fetchUserProfileData = async (currentUser: AuthUser) => {
+      if (!isMounted.current) return;
+      console.log("[ProfilePage] Data Effect: Fetching profile for user:", currentUser.id);
+      setIsFetchingProfile(true);
+      setError(null);
+      try {
+        const { data, error: profileError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', currentUser.id)
+          .single<SupabaseProfile>();
+
+        if (!isMounted.current) return;
+        if (profileError && profileError.code !== 'PGRST116') throw profileError;
+        
+        setProfile(data);
+        if (data) {
+          setFormData({
+            full_name: data.full_name || '',
+            phone_number: data.phone_number || '',
+            address: data.address || '',
+          });
+        } else {
+          console.warn(`[ProfilePage] Data Effect: Profile data not found for user ID: ${currentUser.id}.`);
+        }
+      } catch (err: any) {
+        if (!isMounted.current) return;
+        console.error("[ProfilePage] Data Effect: Error fetching profile:", err);
+        setError(err.message || "Could not fetch your profile data.");
+        setProfile(null);
+      } finally {
+        if (isMounted.current) {
+          setIsFetchingProfile(false);
+          setIsLoading(false); // Overall loading stops after auth check AND profile fetch attempt
+          console.log("[ProfilePage] Data Effect: Finished fetching profile. isLoading set to false.");
+        }
+      }
+    };
+
+    if (authUser) {
+      fetchUserProfileData(authUser);
+    } else {
+        // If authUser becomes null (e.g. logout after initial load), ensure loading stops
+        if (!isLoading && isMounted.current) { // Check !isLoading to avoid race with initial auth check
+             // This case is mostly handled by auth effect, but as a safeguard
+        }
+    }
+  }, [authUser]); // Runs when authUser state changes
+
+  // Effect for redirecting if not authenticated (and not loading)
+  useEffect(() => {
+    if (!isLoading && !authUser && isMounted.current) {
+      console.log("[ProfilePage] Redirect Effect: Not loading, no authUser. Redirecting to login.");
+      router.push('/login?message=Please login to view your profile.&source=profilepage_redirect_effect');
+    }
+  }, [isLoading, authUser, router]);
 
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -137,6 +177,8 @@ export default function ProfilePage() {
       });
       const result = await response.json();
 
+      if (!isMounted.current) return;
+
       if (result.success && result.profile) {
         toast({ title: "Success", description: "Profile updated successfully!" });
         setProfile(result.profile); 
@@ -152,15 +194,16 @@ export default function ProfilePage() {
         setError(errorMsg || "Failed to save profile.");
       }
     } catch (err) {
+      if (!isMounted.current) return;
       console.error("[ProfilePage] Error submitting profile update:", err);
       toast({ title: "Network Error", description: "Could not connect to the server.", variant: "destructive" });
       setError("Could not connect to the server.");
     } finally {
-      setIsSaving(false);
+      if (isMounted.current) setIsSaving(false);
     }
   };
 
-  if (isLoading) {
+  if (isLoading || (authUser && isFetchingProfile)) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-200px)]">
         <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
@@ -168,36 +211,36 @@ export default function ProfilePage() {
       </div>
     );
   }
-
-  // This will be true if useEffect determined no user and set isLoading to false,
-  // and the router.push hasn't unmounted the component yet.
-  if (!authUser) { 
-    console.log("[ProfilePage] Render: No authUser and not loading. Should be redirecting or already redirected via useEffect.");
+  
+  // If not loading and no authenticated user, redirect is handled by an effect. Show interim message.
+  if (!authUser) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-200px)] text-center">
-        <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" /> {/* Keep spinner for redirection indication */}
+        <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
         <p className="text-muted-foreground">Session not found. Redirecting to login...</p>
       </div>
     );
   }
   
+  // If authenticated but there was an error fetching profile data (and not currently editing to fix it)
   if (error && !profile && !isEditing) { 
      return (
       <div className="text-center py-12 max-w-md mx-auto">
         <AlertTriangle className="mx-auto h-12 w-12 text-destructive mb-4" />
-        <h1 className="text-2xl font-semibold text-destructive mb-2">Error Loading Profile</h1>
+        <h1 className="text-2xl font-semibold text-destructive mb-2">Error Loading Profile Data</h1>
         <p className="text-muted-foreground mb-4">{error}</p>
-        <Button onClick={() => { setIsLoading(true); if(authUser) fetchUserProfileData(authUser); }}>Try Again</Button>
+        <Button onClick={() => { if(authUser) { setIsLoading(true); /* fetchUserProfileData will be triggered by authUser effect */ } }}>Try Again</Button>
          <p className="text-xs text-muted-foreground mt-4">User ID: {authUser.id}. Email: {authUser.email}.</p>
       </div>
     );
   }
   
-  if (!profile && !isEditing && authUser) {
+  // If authenticated, no error, but profile is null and not editing (i.e., first time setup)
+  if (!profile && !isEditing) {
     return (
       <div className="text-center py-12 max-w-md mx-auto">
         <UserCircle className="mx-auto h-16 w-16 text-muted-foreground mb-4" />
-        <h1 className="text-3xl font-bold mb-2">Profile Information</h1>
+        <h1 className="text-3xl font-bold mb-2">Set Up Your Profile</h1>
         <p className="text-muted-foreground mb-6">
           Your detailed profile information (name, phone, address) has not been set up yet.
         </p>
@@ -209,11 +252,12 @@ export default function ProfilePage() {
     );
   }
 
+  // Default view: display profile or edit form
   return (
     <div className="space-y-8 max-w-2xl mx-auto">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold font-headline">My Profile</h1>
-        { (profile || isEditing) && (
+        { (profile || isEditing) && ( // Show edit/cancel button if profile exists or if in edit mode for new profile
             <Button variant="outline" onClick={handleEditToggle} disabled={isSaving}>
             {isEditing ? <><XCircle className="mr-2 h-4 w-4" /> Cancel</> : <><Edit3 className="mr-2 h-4 w-4" /> Edit Profile</>}
           </Button>
@@ -227,7 +271,7 @@ export default function ProfilePage() {
               <CardTitle className="text-2xl font-semibold">
                 {profile ? "Edit Your Profile" : "Set Your Profile Details"}
               </CardTitle>
-              {error && <p className="text-sm text-destructive">{error}</p>}
+              {error && !isSaving && <p className="text-sm text-destructive pt-2">{error}</p>}
             </CardHeader>
             <CardContent className="space-y-6 pt-4">
               <div className="space-y-2">
@@ -309,8 +353,7 @@ export default function ProfilePage() {
             </CardFooter>
           </Card>
       ) : (
-        // This case should ideally be covered by the "Set Profile Details" prompt if authUser exists
-        // or by the redirect if authUser is null. Could be a fallback.
+        // Fallback if somehow authUser exists but profile is still null and not in edit mode (should be rare)
         <div className="text-center py-12">
              <UserCircle className="mx-auto h-16 w-16 text-muted-foreground mb-4" />
             <h1 className="text-3xl font-bold mb-2">Profile Information</h1>

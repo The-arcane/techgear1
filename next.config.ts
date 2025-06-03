@@ -1,3 +1,4 @@
+
 import type {NextConfig} from 'next';
 
 const nextConfig: NextConfig = {
@@ -22,9 +23,11 @@ const nextConfig: NextConfig = {
         port: '',
         pathname: '/**',
       },
-      { // Add this block for Supabase storage or your image host
+      { 
         protocol: 'https',
-        hostname: '[your-supabase-project-ref].supabase.co', // Replace with your actual hostname
+        // IMPORTANT: Replace '[your-supabase-project-ref]' with your actual Supabase project reference ID
+        // e.g., 'abcdefgh1234567890.supabase.co'
+        hostname: '[your-supabase-project-ref].supabase.co', 
       },
     ],
   },
