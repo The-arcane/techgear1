@@ -40,11 +40,11 @@ export default async function OrdersPage() {
     redirect('/login?message=Please login to view your orders.');
   }
   
-  console.log(`[OrdersPage] User authenticated: ${user.id}. Fetching orders...`);
+  console.log(`[OrdersPage] User authenticated: ${user.id}. Email: ${user.email}. Fetching orders...`);
   const { data: ordersData, error: ordersFetchError } = await supabase
     .from('orders')
     .select('*')
-    .eq('user_id', user.id)
+    .eq('user_id', user.id) // This correctly uses the authenticated user's ID
     .order('created_at', { ascending: false });
 
   if (ordersFetchError) {
@@ -63,7 +63,7 @@ export default async function OrdersPage() {
     id: dbOrder.id.toString(), // Using Supabase integer ID as string for app consistency
     db_id: dbOrder.id,
     userId: dbOrder.user_id || '', 
-    userEmail: dbOrder.user_email,
+    userEmail: dbOrder.user_email, // This comes from orders.user_email
     items: [], // Items are not fetched for the list view to keep it light
     totalAmount: dbOrder.total_amount,
     status: dbOrder.status as OrderStatus || 'Pending',
@@ -72,6 +72,7 @@ export default async function OrdersPage() {
     paymentMethod: (dbOrder.payment_mode as 'COD') || 'COD',
   })) || [];
 
+  console.log(`[OrdersPage] Successfully fetched ${orders.length} orders for user ${user.id}.`);
 
   return (
     <div className="space-y-8">

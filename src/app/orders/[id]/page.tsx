@@ -17,6 +17,7 @@ type UserOrderDetailPageProps = {
 
 async function getOrderDetailsFromSupabase(orderIdNum: number, userId: string): Promise<Order | null> {
   const supabase = createServerComponentClient({ cookies });
+  console.log(`[getOrderDetailsFromSupabase] Fetching order ID: ${orderIdNum} for user ID: ${userId}`);
 
   const { data: orderData, error: orderError } = await supabase
     .from('orders')
@@ -35,9 +36,10 @@ async function getOrderDetailsFromSupabase(orderIdNum: number, userId: string): 
     .single();
 
   if (orderError || !orderData) {
-    console.error(`Error fetching order ${orderIdNum} for user ${userId}:`, orderError);
+    console.error(`[getOrderDetailsFromSupabase] Error fetching order ${orderIdNum} for user ${userId}:`, JSON.stringify(orderError, null, 2));
     return null;
   }
+  console.log(`[getOrderDetailsFromSupabase] Fetched order data for order ID ${orderIdNum}:`, JSON.stringify(orderData, null, 2));
 
   const { data: orderItemsData, error: itemsError } = await supabase
     .from('order_items')
@@ -49,10 +51,10 @@ async function getOrderDetailsFromSupabase(orderIdNum: number, userId: string): 
     .eq('order_id', orderData.id);
 
   if (itemsError) {
-    console.error(`Error fetching items for order ${orderData.id}:`, itemsError);
-    // Decide if order should be returned with empty items or null
+    console.error(`[getOrderDetailsFromSupabase] Error fetching items for order ${orderData.id}:`, JSON.stringify(itemsError, null, 2));
     return null; 
   }
+  console.log(`[getOrderDetailsFromSupabase] Fetched items for order ID ${orderData.id}:`, JSON.stringify(orderItemsData, null, 2));
 
   const items: CartItem[] = orderItemsData?.map(item => ({
     productId: item.products?.id?.toString() || 'unknown-product',
@@ -81,6 +83,7 @@ async function getOrderDetailsFromSupabase(orderIdNum: number, userId: string): 
 export async function generateMetadata({ params }: UserOrderDetailPageProps): Promise<Metadata> {
   const supabase = createServerComponentClient({ cookies });
   const { data: { user } } = await supabase.auth.getUser();
+  console.log(`[generateMetadata /orders/${params.id}] User for metadata:`, user ? user.id : 'No user');
   
   let orderTitleId: string | null = null;
   if (user) {
@@ -97,6 +100,7 @@ export async function generateMetadata({ params }: UserOrderDetailPageProps): Pr
       }
     }
   }
+  console.log(`[generateMetadata /orders/${params.id}] Order title ID for metadata: ${orderTitleId}`);
   
   return {
     title: `Order Details ${orderTitleId ? `#${orderTitleId}` : ''} | TechGear`,
@@ -106,16 +110,34 @@ export async function generateMetadata({ params }: UserOrderDetailPageProps): Pr
 
 
 export default async function UserOrderDetailPage({ params }: UserOrderDetailPageProps) {
-  const supabase = createServerComponentClient({ cookies });
-  const { data: { user } } = await supabase.auth.getUser();
+  const cookieStore = cookies();
+  console.log(`[UserOrderDetailPage /orders/${params.id}] All cookies visible to server component:`, JSON.stringify(cookieStore.getAll(), null, 2));
+  
+  const supabase = createServerComponentClient({ cookies: () => cookieStore });
+  
+  console.log(`[UserOrderDetailPage /orders/${params.id}] Attempting to get user session...`);
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+  if (authError) {
+    console.error(
+      `[UserOrderDetailPage /orders/${params.id}] Error getting user session. Name:`, authError.name, 
+      'Message:', authError.message, 
+      'Status:', authError.status,
+      'Full Error:', JSON.stringify(authError, null, 2)
+    );
+  }
+  console.log(`[UserOrderDetailPage /orders/${params.id}] User object from supabase.auth.getUser():`, JSON.stringify(user, null, 2));
 
   if (!user) {
+     console.log(`[UserOrderDetailPage /orders/${params.id}] No user found or auth error, redirecting to login.`);
     redirect('/login?message=Please login to view your order details.');
   }
+  console.log(`[UserOrderDetailPage /orders/${params.id}] User authenticated: ${user.id}. Email: ${user.email}.`);
 
   const orderIdNum = parseInt(params.id, 10);
 
   if (isNaN(orderIdNum)) {
+    console.log(`[UserOrderDetailPage /orders/${params.id}] Invalid Order ID in URL: ${params.id}.`);
     return (
       <div className="text-center py-12">
         <AlertTriangle className="mx-auto h-12 w-12 text-destructive mb-4" />
@@ -131,6 +153,7 @@ export default async function UserOrderDetailPage({ params }: UserOrderDetailPag
   const order = await getOrderDetailsFromSupabase(orderIdNum, user.id);
 
   if (!order) {
+    console.log(`[UserOrderDetailPage /orders/${params.id}] Order not found for ID ${orderIdNum} and user ${user.id}.`);
     return (
       <div className="text-center py-12">
         <AlertTriangle className="mx-auto h-12 w-12 text-destructive mb-4" />
@@ -146,6 +169,7 @@ export default async function UserOrderDetailPage({ params }: UserOrderDetailPag
       </div>
     );
   }
+  console.log(`[UserOrderDetailPage /orders/${params.id}] Successfully fetched order details for order ID ${order.db_id}.`);
 
   const { shippingAddress } = order;
 
