@@ -18,39 +18,41 @@ type ProductPageProps = {
 async function getProductById(productId: string): Promise<Product | null> {
   let appUrl = process.env.NEXT_PUBLIC_APP_URL;
   const defaultAppUrl = 'http://localhost:9002'; // Default fallback for local development
+  let usingFallbackUrl = false;
 
   if (!appUrl) {
     console.warn(
-      `WARNING: The NEXT_PUBLIC_APP_URL environment variable is not set. 
-      Using default fallback: ${defaultAppUrl}.
-      This is required for server-side API calls to function correctly (e.g., for product detail pages).
-      Please create or update your .env.local file in the root of your project and add:
-      NEXT_PUBLIC_APP_URL=http://localhost:9002 
-      (Replace 9002 with your actual development port if different).
-      Then, restart your development server.
-      This is crucial for server-side API calls.`
+      `CRITICAL (getProductById): NEXT_PUBLIC_APP_URL environment variable is NOT SET. 
+      Falling back to default: ${defaultAppUrl}. 
+      This WILL FAIL on deployed environments like Netlify or Vercel. 
+      Please set this variable in your hosting provider's settings to your site's public URL.`
     );
-    appUrl = defaultAppUrl; // Assign the default fallback
+    appUrl = defaultAppUrl;
+    usingFallbackUrl = true;
   }
 
   const fetchUrl = `${appUrl}/api/products/${productId}`;
+  console.log(`(getProductById) Attempting to fetch product ${productId} from URL: ${fetchUrl}`);
 
   try {
     const res = await fetch(fetchUrl, { cache: 'no-store' }); // Fetch fresh data
     if (!res.ok) {
-      if (res.status === 404) return null;
-      console.error(`Failed to fetch product ${productId} from ${fetchUrl}: ${res.status} ${res.statusText}`);
+      if (res.status === 404) {
+        console.log(`(getProductById) Product ${productId} not found at ${fetchUrl} (404).`);
+        return null;
+      }
+      console.error(`(getProductById) Failed to fetch product ${productId} from ${fetchUrl}: ${res.status} ${res.statusText}. Response: ${await res.text().catch(() => 'Could not read response text')}`);
       return null;
     }
     const data = await res.json();
+    console.log(`(getProductById) Successfully fetched product ${productId}.`);
     return data.product;
-  } catch (error) {
-    console.error(`Error fetching product ${productId} from ${fetchUrl}:`, error);
-    // If fetch fails due to network or parsing, it might indicate the defaultAppUrl is also incorrect or server not running
-    // No explicit throw here for missing env var, as we're using a fallback.
-    // However, if fetch itself fails, that's a runtime issue.
-    if (error instanceof TypeError && error.message.includes('fetch failed')) {
-        console.error(`Fetch failed for ${fetchUrl}. If using the default URL, ensure your local server is running on ${defaultAppUrl} and accessible.`);
+  } catch (error: any) {
+    console.error(`(getProductById) Error fetching product ${productId} from ${fetchUrl}:`, error.message, error.stack);
+    if (usingFallbackUrl && error.message.includes('fetch failed')) {
+      console.error(`(getProductById) FETCH FAILED using fallback URL. This strongly indicates NEXT_PUBLIC_APP_URL is missing or incorrect on your deployment platform.`);
+    } else if (error.message.includes('fetch failed')) {
+      console.error(`(getProductById) FETCH FAILED. Check network connectivity from server to ${fetchUrl} or if the URL is correct and accessible.`);
     }
     return null;
   }
