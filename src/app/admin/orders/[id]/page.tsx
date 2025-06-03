@@ -11,6 +11,7 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import type { Database } from '@/lib/database.types';
 import type { Order, OrderStatus, CartItem, SupabaseOrderFetched, SupabaseOrderItemWithProduct, ShippingAddress } from '@/lib/types';
+import { PrintInvoiceButton } from '@/components/admin/PrintInvoiceButton';
 
 type AdminOrderDetailPageProps = {
   params: { id: string };
@@ -274,7 +275,7 @@ export default async function AdminOrderDetailPage({ params }: AdminOrderDetailP
         </CardContent>
         <CardFooter className="p-6 bg-slate-50 dark:bg-slate-800/50 flex justify-end">
             {/* Potential actions for admin: Print Invoice, Resend Confirmation, Trigger Refund etc. */}
-            <Button variant="secondary" onClick={() => alert("Mock action: Print Invoice")}>Print Invoice</Button>
+            <PrintInvoiceButton />
         </CardFooter>
       </Card>
     </div>
