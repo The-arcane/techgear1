@@ -11,7 +11,7 @@ import {
   SheetContent,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 const navLinks = [
   { href: '/', label: 'Home' },
@@ -26,9 +26,15 @@ const navLinks = [
 export function Header() {
   const { itemCount } = useCart();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isClient, setIsClient] = useState(false);
+
   // Placeholder for auth state
-  const isAuthenticated = false; 
+  const isAuthenticated = false;
   const isAdmin = false;
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   const closeMobileMenu = () => setIsMobileMenuOpen(false);
 
@@ -49,7 +55,7 @@ export function Header() {
           <Link href="/cart">
             <Button variant="ghost" size="icon" aria-label="Shopping Cart">
               <ShoppingCart className="h-5 w-5" />
-              {itemCount > 0 && (
+              {isClient && itemCount > 0 && (
                 <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-xs text-primary-foreground">
                   {itemCount}
                 </span>
