@@ -1,9 +1,9 @@
 
-import { createServerClient, type CookieOptions } from '@supabase/ssr';
+import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { UserCircle, Mail, Phone, MapPin, Edit3, AlertTriangle } from 'lucide-react';
@@ -31,7 +31,7 @@ export default async function ProfilePage() {
         <div className="text-center py-12">
             <AlertTriangle className="mx-auto h-12 w-12 text-destructive mb-4" />
             <h1 className="text-2xl font-semibold text-destructive">Server Configuration Error</h1>
-            <p className="text-muted-foreground mt-2">The application is not configured correctly. Please contact support.</p>
+            <p className="text-muted-foreground mt-2">The application is not configured correctly. Please check your environment variables and contact support.</p>
         </div>
     );
   }
@@ -64,7 +64,7 @@ export default async function ProfilePage() {
   
   if (authUserError || !user) {
     console.log('[ProfilePage] No user found or auth error, redirecting to login.');
-    redirect('/login?message=Please login to view your profile.');
+    redirect('/login?message=Please login to view your profile.&source=profilepage');
   }
 
   console.log(`[ProfilePage] User authenticated: ${user.id}. Fetching profile...`);
@@ -74,7 +74,7 @@ export default async function ProfilePage() {
     .eq('id', user.id)
     .single<SupabaseProfile>();
 
-  if (profileError && profileError.code !== 'PGRST116') { 
+  if (profileError && profileError.code !== 'PGRST116') { // PGRST116: row not found (handled below)
     console.error("[ProfilePage] Error fetching profile:", JSON.stringify(profileError, null, 2));
     return (
       <div className="text-center py-12">
@@ -88,21 +88,24 @@ export default async function ProfilePage() {
   
   if (!profile) {
     console.warn(`[ProfilePage] Profile not found for user ID: ${user.id}. This usually means the profile was not created after signup (database trigger issue).`);
-    // Consider creating a profile on-the-fly or guiding the user, for now, showing an error.
     return (
       <div className="text-center py-12">
         <UserCircle className="mx-auto h-16 w-16 text-muted-foreground mb-4" />
         <h1 className="text-3xl font-bold mb-2">Profile Not Found</h1>
         <p className="text-muted-foreground mb-6">
           We couldn't find a profile associated with your account. 
-          This may happen if account setup wasn't fully completed.
+          This may happen if account setup wasn't fully completed (e.g., the database trigger for profile creation might be missing or failed).
         </p>
         <Link href="/">
             <Button variant="outline">Back to Home</Button>
         </Link>
+         <p className="text-xs text-muted-foreground mt-4">
+            User ID: {user.id}. Email: {user.email}.
+        </p>
       </div>
     );
   }
+  console.log(`[ProfilePage] Successfully fetched profile for user ${user.id}:`, JSON.stringify(profile, null, 2));
 
   return (
     <div className="space-y-8 max-w-2xl mx-auto">

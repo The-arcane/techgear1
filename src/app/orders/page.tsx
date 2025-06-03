@@ -6,7 +6,7 @@ import Link from "next/link";
 import { ShoppingBag, AlertTriangle } from "lucide-react";
 import type { Order, OrderStatus, SupabaseOrderFetched } from "@/lib/types"; 
 import type { Metadata } from 'next';
-import { createServerClient, type CookieOptions } from '@supabase/ssr';
+import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import type { Database } from '@/lib/database.types';
@@ -32,7 +32,7 @@ export default async function OrdersPage() {
         <div className="text-center py-12">
             <AlertTriangle className="mx-auto h-12 w-12 text-destructive mb-4" />
             <h1 className="text-2xl font-semibold text-destructive">Server Configuration Error</h1>
-            <p className="text-muted-foreground mt-2">The application is not configured correctly. Please contact support.</p>
+            <p className="text-muted-foreground mt-2">The application is not configured correctly. Please check your environment variables and contact support if the issue persists.</p>
         </div>
     );
   }
@@ -45,8 +45,6 @@ export default async function OrdersPage() {
         get(name: string) {
           return cookieStore.get(name)?.value;
         },
-        // For server components, only 'get' is typically needed for an incoming request.
-        // 'set' and 'remove' are handled by middleware for the response.
       },
     }
   );
@@ -67,14 +65,14 @@ export default async function OrdersPage() {
 
   if (authError || !user) {
     console.log('[OrdersPage] Auth error or no user found, redirecting to login. AuthError:', !!authError, 'User:', !!user);
-    redirect('/login?message=Please login to view your orders.');
+    redirect('/login?message=Please login to view your orders.&source=orderspage');
   }
   
   console.log(`[OrdersPage] User authenticated: ${user.id}. Email: ${user.email}. Fetching orders...`);
   const { data: ordersData, error: ordersFetchError } = await supabase
     .from('orders')
     .select('*')
-    .eq('user_id', user.id)
+    .eq('user_id', user.id) // Fetch orders for the logged-in user
     .order('created_at', { ascending: false });
 
   if (ordersFetchError) {
@@ -90,11 +88,11 @@ export default async function OrdersPage() {
   }
   
   const orders: Order[] = ordersData?.map((dbOrder: SupabaseOrderFetched) => ({
-    id: dbOrder.id.toString(),
+    id: dbOrder.id.toString(), // Use DB ID as string for app consistency
     db_id: dbOrder.id,
     userId: dbOrder.user_id || '', 
     userEmail: dbOrder.user_email,
-    items: [], 
+    items: [], // Items are not fetched in the list view for brevity, fetched in detail view
     totalAmount: dbOrder.total_amount,
     status: dbOrder.status as OrderStatus || 'Pending',
     orderDate: dbOrder.created_at,

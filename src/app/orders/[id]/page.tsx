@@ -7,7 +7,7 @@ import { ArrowLeft, Package, MapPin, CreditCard, ShoppingCart, AlertTriangle } f
 import Image from 'next/image';
 import Link from 'next/link';
 import type { Metadata } from 'next';
-import { createServerClient, type CookieOptions } from '@supabase/ssr';
+import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import type { Database } from '@/lib/database.types';
@@ -85,15 +85,8 @@ export async function generateMetadata({ params }: UserOrderDetailPageProps): Pr
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
   
-  const supabase = createServerClient<Database>(
-    supabaseUrl,
-    supabaseAnonKey,
-    {
-      cookies: {
-        get(name: string) { return cookieStore.get(name)?.value },
-      },
-    }
-  );
+  // Minimal client for metadata, assuming env vars are correct
+  const supabase = createServerClient<Database>(supabaseUrl, supabaseAnonKey, { cookies: { get: (name) => cookieStore.get(name)?.value } });
 
   const { data: { user } } = await supabase.auth.getUser();
   console.log(`[generateMetadata /orders/${params.id}] User for metadata:`, user ? user.id : 'No user');
@@ -138,7 +131,7 @@ export default async function UserOrderDetailPage({ params }: UserOrderDetailPag
         <div className="text-center py-12">
             <AlertTriangle className="mx-auto h-12 w-12 text-destructive mb-4" />
             <h1 className="text-2xl font-semibold text-destructive">Server Configuration Error</h1>
-            <p className="text-muted-foreground mt-2">The application is not configured correctly. Please contact support.</p>
+            <p className="text-muted-foreground mt-2">The application is not configured correctly. Please check your environment variables and contact support.</p>
         </div>
     );
   }
@@ -171,7 +164,7 @@ export default async function UserOrderDetailPage({ params }: UserOrderDetailPag
 
   if (authError || !user) {
      console.log(`[UserOrderDetailPage /orders/${params.id}] No user found or auth error, redirecting to login.`);
-    redirect('/login?message=Please login to view your order details.');
+    redirect(`/login?message=Please login to view your order details.&source=orderdetailpage_${params.id}`);
   }
   console.log(`[UserOrderDetailPage /orders/${params.id}] User authenticated: ${user.id}. Email: ${user.email}.`);
 
