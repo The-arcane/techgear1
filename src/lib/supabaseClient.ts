@@ -1,6 +1,6 @@
 
-import { createClient } from '@supabase/supabase-js';
-import type { Database } from './database.types'; // We'll generate this file next
+import { createBrowserClient } from '@supabase/ssr';
+import type { Database } from './database.types';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -12,4 +12,5 @@ if (!supabaseAnonKey) {
   throw new Error("Supabase anonymous key not found. Please define NEXT_PUBLIC_SUPABASE_ANON_KEY in your .env file.");
 }
 
-export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey);
+// Use createBrowserClient for the client-side singleton
+export const supabase = createBrowserClient<Database>(supabaseUrl, supabaseAnonKey);
