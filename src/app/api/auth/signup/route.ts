@@ -8,7 +8,6 @@ const signupSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
   email: z.string().email({ message: "Invalid email address." }),
   password: z.string().min(6, { message: "Password must be at least 6 characters." }),
-  // Add other fields for profiles table if needed, e.g., phone_number, address
 });
 
 export async function POST(request: Request) {
@@ -22,63 +21,87 @@ export async function POST(request: Request) {
 
     const { name, email, password } = validation.data;
 
-    // --- Supabase Auth User Creation (Conceptual - Full Integration Recommended) ---
-    // In a full Supabase setup, you'd first sign up the user with Supabase Auth:
-    // const { data: authData, error: authError } = await supabase.auth.signUp({
-    //   email: email,
-    //   password: password,
-    //   options: {
-    //     data: {
-    //       full_name: name, 
-    //       // other metadata for auth.users table if needed
-    //     }
-    //   }
-    // });
+    // --- FULL SUPABASE AUTHENTICATION AND PROFILE CREATION (TARGET IMPLEMENTATION) ---
+    //
+    // In a complete Supabase setup, the flow would be:
+    //
+    // 1. Sign up the user with Supabase Auth:
+    //    const { data: authData, error: authError } = await supabase.auth.signUp({
+    //      email: email,
+    //      password: password,
+    //      options: {
+    //        data: {
+    //          // You can pass metadata to be stored in auth.users table,
+    //          // though full_name is often stored in a separate 'profiles' table.
+    //        }
+    //      }
+    //    });
+    //
+    //    if (authError) {
+    //      console.error('Supabase Auth Signup Error:', authError);
+    //      return NextResponse.json({ success: false, message: authError.message || "Authentication signup failed." }, { status: 400 });
+    //    }
+    //    if (!authData.user) {
+    //       return NextResponse.json({ success: false, message: "User not created after signup." }, { status: 500 });
+    //    }
+    //    const userId = authData.user.id; // This is the REAL UUID from Supabase Auth.
+    //
+    // 2. Create a corresponding public profile in your 'profiles' table:
+    //    const { data: profileData, error: profileError } = await supabase
+    //      .from('profiles')
+    //      .insert([
+    //        { 
+    //          id: userId, // Use the ID from authData.user.id
+    //          full_name: name,
+    //          // phone_number: body.phone_number, // if collecting these
+    //          // address: body.address,
+    //        },
+    //      ])
+    //      .select();
+    //
+    //    if (profileError) {
+    //      console.error('Supabase Profile Creation Error:', profileError);
+    //      // IMPORTANT: If profile creation fails, you might want to consider
+    //      // deleting the auth user that was just created to keep data consistent,
+    //      // or implement retry logic. This is a critical part of robust error handling.
+    //      // For example: await supabase.auth.admin.deleteUser(userId); (requires admin privileges)
+    //      return NextResponse.json({ success: false, message: profileError.message || "Profile creation failed after auth user creation." }, { status: 500 });
+    //    }
+    //
+    //    return NextResponse.json({ 
+    //      success: true, 
+    //      message: "User registered and profile created successfully. Please check your email to confirm.",
+    //      user: profileData ? profileData[0] : null 
+    //    }, { status: 201 });
+    //
+    // --- END OF TARGET IMPLEMENTATION ---
 
-    // if (authError) {
-    //   console.error('Supabase Auth Signup Error:', authError);
-    //   return NextResponse.json({ success: false, message: authError.message || "Authentication signup failed." }, { status: 400 });
+
+    // --- CURRENT TEMPORARY STEP: SIMULATING SIGNUP SUCCESS ---
+    // To avoid the foreign key constraint error ("profiles_id_fkey") during this step-by-step development,
+    // we are temporarily SKIPPING the actual insertion into the 'profiles' table.
+    // The error occurs because 'profiles.id' is a foreign key to 'auth.users.id',
+    // and we haven't created an 'auth.users' record first in this simplified API route.
+    //
+    // const userIdForProfile = crypto.randomUUID(); // This was causing the FK error.
+    //
+    // const { data: profileData, error: profileError } = await supabase
+    //   .from('profiles')
+    //   .insert([{ id: userIdForProfile, full_name: name }])
+    //   .select();
+    //
+    // if (profileError) {
+    //   console.error('Supabase Profile Creation Error (Simulated):', profileError);
+    //   return NextResponse.json({ success: false, message: profileError.message || "Profile creation failed (simulated)." }, { status: 500 });
     // }
-    // if (!authData.user) {
-    //    return NextResponse.json({ success: false, message: "User not created after signup." }, { status: 500 });
-    // }
-    // const userId = authData.user.id; // This would be the REAL UUID from Supabase Auth
-    // --- End Supabase Auth User Creation ---
-    
-    // --- Simplified Profile Creation ---
-    // For this example, we'll simulate inserting into the 'profiles' table.
-    // In a real scenario, the 'id' for the profiles table should be the Supabase auth user's ID.
-    // We are generating a valid UUID here to satisfy the column type.
-    // Ideally, this ID comes from the actual Supabase Auth user creation process shown above.
-    
-    const userIdForProfile = crypto.randomUUID(); // Generate a valid UUID
+    // --- END OF CURRENT TEMPORARY STEP ---
 
-    const { data: profileData, error: profileError } = await supabase
-      .from('profiles')
-      .insert([
-        { 
-          id: userIdForProfile, // Use the generated valid UUID
-          full_name: name,
-          // email: email, // profiles table doesn't have email based on your schema, email is in auth.users
-          // phone_number: body.phone_number, // if you add these to form and schema
-          // address: body.address,
-        },
-      ])
-      .select();
-
-    if (profileError) {
-      console.error('Supabase Profile Creation Error:', profileError);
-      // You might want to handle the case where auth user was created but profile failed (e.g., delete auth user or retry)
-      return NextResponse.json({ success: false, message: profileError.message || "Profile creation failed." }, { status: 500 });
-    }
-    // --- End Simplified Profile Creation ---
-
-
-    // For now, we'll return a generic success, as JWT/session management would be handled by Supabase client libraries
+    // For now, we'll return a generic success, as actual user/profile creation is deferred
+    // to a more complete Supabase Auth integration.
     return NextResponse.json({ 
       success: true, 
-      message: "User registered successfully (mock profile created with valid UUID). Please login.",
-      // user: profileData ? profileData[0] : null // You might return the created profile
+      message: "Signup successful (simulation). Profile creation is currently skipped. Please login.",
+      // user: null // No actual user/profile data returned in this simulation
     }, { status: 201 });
 
   } catch (error) {
