@@ -23,56 +23,65 @@ interface GetProductResult {
 }
 
 async function getProductById(productId: string): Promise<GetProductResult> {
-  let appUrl = process.env.NEXT_PUBLIC_APP_URL;
-  const defaultAppUrl = 'http://localhost:9002'; // Default fallback for local development
+  const rawEnvVar = process.env.NEXT_PUBLIC_APP_URL;
+  console.log(`(getProductById) Initial check - Raw process.env.NEXT_PUBLIC_APP_URL: "${rawEnvVar}" (type: ${typeof rawEnvVar})`);
+
+  let appUrl: string;
+  const defaultAppUrl = 'http://localhost:9002'; // Fallback for local development
   let usingFallbackUrl = false;
   let errorType: GetProductResult['errorType'] = undefined;
 
-  if (!appUrl) {
+  if (typeof rawEnvVar === 'string' && rawEnvVar.trim() !== '') {
+    // Use the env var, remove trailing slash if present for consistency
+    appUrl = rawEnvVar.replace(/\/$/, "");
+    console.log(`(getProductById) Successfully read and using NEXT_PUBLIC_APP_URL: ${appUrl}`);
+  } else {
     console.warn(
-      `CRITICAL (getProductById): NEXT_PUBLIC_APP_URL environment variable is NOT SET. 
-      Falling back to default: ${defaultAppUrl}. 
+      `CRITICAL (getProductById): NEXT_PUBLIC_APP_URL environment variable is NOT SET, empty, or not a string. 
+      Current value: "${rawEnvVar}" (type: ${typeof rawEnvVar}).
+      Falling back to default for API calls: ${defaultAppUrl}. 
       This WILL FAIL on deployed environments like Netlify or Vercel. 
-      Please set this variable in your hosting provider's settings to your site's public URL.`
+      Please ensure NEXT_PUBLIC_APP_URL is correctly set in your hosting provider's environment variables to your site's full public URL (e.g., https://your-site.netlify.app).`
     );
     appUrl = defaultAppUrl;
     usingFallbackUrl = true;
-    errorType = 'env_var_missing'; // Set error type if env var is missing
+    errorType = 'env_var_missing';
   }
 
+  // Construct the final URL for the API endpoint
   const fetchUrl = `${appUrl}/api/products/${productId}`;
-  console.log(`(getProductById) Attempting to fetch product ${productId} from URL: ${fetchUrl}`);
+
+  console.log(`(getProductById) Attempting to fetch product ${productId} from final URL: ${fetchUrl}`);
 
   try {
     const res = await fetch(fetchUrl, { cache: 'no-store' }); // Fetch fresh data
     if (!res.ok) {
       const responseText = await res.text().catch(() => 'Could not read response text');
-      if (res.status === 404) {
-        console.log(`(getProductById) Product ${productId} not found at ${fetchUrl} (404). Response: ${responseText}`);
-        return { product: null, errorType: 'not_found', errorMessage: `API returned 404: ${responseText}`, debugFetchUrl: fetchUrl };
-      }
+      let resolvedErrorType: GetProductResult['errorType'] = errorType || (res.status === 404 ? 'not_found' : 'api_error');
+      
       console.error(`(getProductById) Failed to fetch product ${productId} from ${fetchUrl}: ${res.status} ${res.statusText}. Response: ${responseText}`);
-      // If env_var_missing was the initial reason for fallback, keep that error type
-      return { product: null, errorType: errorType || 'api_error', errorMessage: `API Error ${res.status}: ${res.statusText}. Details: ${responseText}`, debugFetchUrl: fetchUrl };
+      return { product: null, errorType: resolvedErrorType, errorMessage: `API Error ${res.status}: ${res.statusText}. Details: ${responseText}`, debugFetchUrl: fetchUrl };
     }
     const data = await res.json();
-    console.log(`(getProductById) Successfully fetched product ${productId}.`);
-     if (!data.product && data.message) { // Handle cases where API returns success but product is null with a message
+    console.log(`(getProductById) Successfully fetched and parsed JSON for product ${productId}.`);
+    
+    if (!data.product && data.message) {
+        console.warn(`(getProductById) API returned success but product is null. Message: ${data.message}. URL: ${fetchUrl}`);
         return { product: null, errorType: 'not_found', errorMessage: data.message, debugFetchUrl: fetchUrl };
     }
-    return { product: data.product, debugFetchUrl: fetchUrl };
-  } catch (error: any) {
-    console.error(`(getProductById) Error fetching product ${productId} from ${fetchUrl}:`, error.message, error.stack);
-    // If env_var_missing was already set, prioritize it.
-    if (errorType === 'env_var_missing') {
-        // The fetch likely failed because localhost was used.
-    } else if (error.message.includes('fetch failed')) {
-      console.error(`(getProductById) FETCH FAILED. Check network connectivity from server to ${fetchUrl} or if the URL is correct and accessible.`);
-      errorType = 'fetch_failed';
-    } else {
-        errorType = 'fetch_failed'; // Generic fetch error
+    if (!data.product && !data.message) {
+        console.warn(`(getProductById) API returned success but product is null and no message. URL: ${fetchUrl}`);
+        return { product: null, errorType: 'not_found', errorMessage: 'Product data was null in API response.', debugFetchUrl: fetchUrl };
     }
-    return { product: null, errorType, errorMessage: error.message, debugFetchUrl: fetchUrl };
+    return { product: data.product, debugFetchUrl: fetchUrl, errorType: usingFallbackUrl ? 'env_var_missing' : undefined };
+  } catch (error: any) {
+    console.error(`(getProductById) Catch block: Error fetching product ${productId} from ${fetchUrl}:`, error.message, error.stack);
+    let resolvedErrorType: GetProductResult['errorType'] = errorType || 'fetch_failed';
+     if (error.message.includes('fetch failed')) {
+      console.error(`(getProductById) FETCH FAILED. This often means the server could not reach the URL: ${fetchUrl}. If this is a localhost URL on a deployed server, it will fail. Ensure NEXT_PUBLIC_APP_URL is correct.`);
+      resolvedErrorType = 'fetch_failed';
+    }
+    return { product: null, errorType: resolvedErrorType, errorMessage: error.message, debugFetchUrl: fetchUrl };
   }
 }
 
@@ -88,7 +97,7 @@ export async function generateMetadata({ params }: ProductPageProps): Promise<Me
   }
   return {
     title: `${product.name} | TechGear`,
-    description: product.description.substring(0, 160), // Keep description concise for metadata
+    description: product.description.substring(0, 160), 
     openGraph: {
         title: `${product.name} | TechGear`,
         description: product.description.substring(0, 160),
@@ -105,7 +114,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
   if (!product) {
     let title = "Product Not Found";
     let userMessage = `The product you are looking for (ID: ${id}) does not exist or could not be loaded.`;
-    let details: string | undefined = result.debugFetchUrl ? `Attempted to fetch from: ${result.debugFetchUrl}` : undefined;
+    let details: string | undefined = `Attempted to fetch from: ${result.debugFetchUrl || 'unknown URL'}.`;
 
     if (result.errorType === 'env_var_missing') {
       title = "Configuration Error";
@@ -117,7 +126,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
       details = `Fetch URL: ${result.debugFetchUrl}. Error: ${result.errorMessage || 'Fetch operation failed.'}`;
     } else if (result.errorType === 'not_found') {
         userMessage = result.errorMessage || `Product with ID ${id} was not found by the API.`;
-        details = `Fetch URL: ${result.debugFetchUrl}. Note: API reported 'not found'.`;
+        details = `Fetch URL: ${result.debugFetchUrl}. Note: API reported 'not found' or product data was null. Error: ${result.errorMessage}`;
     } else if (result.errorType === 'api_error') {
         title = "API Error";
         userMessage = `There was an error retrieving product (ID: ${id}) from the API.`;
