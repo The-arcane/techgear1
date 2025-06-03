@@ -10,8 +10,6 @@ import Link from "next/link";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from 'next/navigation';
 
-// import { loginUser } from "@/lib/actions/auth.actions"; // Placeholder for server action
-
 export function LoginForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -23,26 +21,35 @@ export function LoginForm() {
     e.preventDefault();
     setIsLoading(true);
 
-    // Placeholder for general user login
-    // const result = await loginUser({ email, password });
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    // Simulate a generic user login attempt
-    if (typeof window !== 'undefined') {
-        localStorage.setItem('isAuthenticated', 'true'); // Simulate successful general login
-        localStorage.removeItem('isAdmin'); // Ensure isAdmin is cleared for non-admin logins
-    }
-    // For demo purposes, let's assume general login is successful and redirects to home.
-    // In a real app, this would involve backend validation.
-    const result = { success: true, message: "Logged in successfully! (mock)" };
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
 
+      const result = await response.json();
 
-    if (result.success) {
-      toast({ title: "Login Successful", description: "Welcome back!" });
-      router.push('/'); // Redirect general users to homepage
-    } else {
-      toast({ title: "Login Failed", description: result.message, variant: "destructive" });
+      if (response.ok && result.success && result.token && result.user) {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('authToken', result.token);
+          localStorage.setItem('authUser', JSON.stringify(result.user));
+        }
+        toast({ title: "Login Successful", description: "Welcome back!" });
+        // Check if user is admin, if so redirect to admin, else to home
+        // This form is for general users, AdminLoginForm handles admin-specific redirection
+        router.push('/'); 
+        router.refresh(); // To re-trigger header auth check
+      } else {
+        const errorMsg = result.message || "Login failed. Please check your credentials.";
+        toast({ title: "Login Failed", description: errorMsg, variant: "destructive" });
+      }
+    } catch (error) {
+      console.error("Login form error:", error);
+      toast({ title: "Error", description: "An unexpected error occurred.", variant: "destructive" });
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
   return (

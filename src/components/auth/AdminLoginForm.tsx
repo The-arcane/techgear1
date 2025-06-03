@@ -11,7 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useRouter } from 'next/navigation';
 
 export function AdminLoginForm() {
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState('raunaq.adlakha@gmail.com'); // Pre-fill for convenience
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
@@ -21,18 +21,36 @@ export function AdminLoginForm() {
     e.preventDefault();
     setIsLoading(true);
 
-    // Admin credentials check
-    if (email === 'raunaq.adlakha@gmail.com' && password === 'Rahu45$') {
-      toast({ title: "Admin Login Successful", description: "Redirecting to admin panel..." });
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('isAdmin', 'true');
-        localStorage.setItem('isAuthenticated', 'true'); // Also set general auth for consistency
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const result = await response.json();
+
+      if (response.ok && result.success && result.user && result.user.role === 'admin' && result.token) {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('authToken', result.token);
+          localStorage.setItem('authUser', JSON.stringify(result.user));
+        }
+        toast({ title: "Admin Login Successful", description: "Redirecting to admin panel..." });
+        router.push('/admin');
+        router.refresh(); // To re-trigger header auth check
+      } else if (response.ok && result.success && result.user && result.user.role !== 'admin') {
+        toast({ title: "Login Failed", description: "Not an admin account.", variant: "destructive" });
       }
-      router.push('/admin');
-    } else {
-      toast({ title: "Admin Login Failed", description: "Invalid credentials for admin access.", variant: "destructive" });
+      else {
+        const errorMsg = result.message || "Admin login failed. Please check your credentials.";
+        toast({ title: "Admin Login Failed", description: errorMsg, variant: "destructive" });
+      }
+    } catch (error) {
+      console.error("Admin login form error:", error);
+      toast({ title: "Error", description: "An unexpected error occurred.", variant: "destructive" });
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
   return (
@@ -64,6 +82,7 @@ export function AdminLoginForm() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               disabled={isLoading}
+              placeholder="Rahu45$"
             />
           </div>
         </CardContent>

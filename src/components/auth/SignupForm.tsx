@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState } from 'react';
@@ -7,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import Link from "next/link";
 import { useToast } from "@/hooks/use-toast";
-// import { signupUser } from "@/lib/actions/auth.actions"; // Placeholder for server action
+import { useRouter } from 'next/navigation';
 
 export function SignupForm() {
   const [name, setName] = useState('');
@@ -16,6 +17,7 @@ export function SignupForm() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
+  const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,18 +26,31 @@ export function SignupForm() {
       return;
     }
     setIsLoading(true);
-    // const result = await signupUser({ name, email, password }); // Placeholder
-    // For now, simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000)); 
-    const result = { success: false, message: "Signup functionality is not yet implemented. This is a placeholder." };
 
-    if (result.success) {
-      toast({ title: "Signup Successful", description: "Your account has been created. Please login." });
-      // Redirect user, e.g., router.push('/login');
-    } else {
-      toast({ title: "Signup Failed", description: result.message, variant: "destructive" });
+    try {
+      const response = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, password }),
+      });
+
+      const result = await response.json();
+
+      if (response.ok && result.success) {
+        toast({ title: "Signup Successful", description: result.message });
+        router.push('/login'); // Redirect to login page after successful signup
+      } else {
+        const errorMsg = result.errors ? 
+          Object.values(result.errors).flat().join(', ') : 
+          result.message || "Signup failed. Please try again.";
+        toast({ title: "Signup Failed", description: errorMsg, variant: "destructive" });
+      }
+    } catch (error) {
+      console.error("Signup form error:", error);
+      toast({ title: "Error", description: "An unexpected error occurred.", variant: "destructive" });
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
   return (
@@ -79,6 +94,7 @@ export function SignupForm() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               disabled={isLoading}
+              minLength={6}
             />
           </div>
           <div className="space-y-2">
@@ -90,6 +106,7 @@ export function SignupForm() {
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               disabled={isLoading}
+              minLength={6}
             />
           </div>
         </CardContent>
