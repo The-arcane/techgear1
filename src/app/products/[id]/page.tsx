@@ -30,7 +30,7 @@ async function getProductById(productId: string): Promise<Product | null> {
       Then, restart your development server.
       This is crucial for server-side API calls.`
     );
-    appUrl = defaultAppUrl;
+    appUrl = defaultAppUrl; // Assign the default fallback
   }
 
   const fetchUrl = `${appUrl}/api/products/${productId}`;
@@ -46,6 +46,12 @@ async function getProductById(productId: string): Promise<Product | null> {
     return data.product;
   } catch (error) {
     console.error(`Error fetching product ${productId} from ${fetchUrl}:`, error);
+    // If fetch fails due to network or parsing, it might indicate the defaultAppUrl is also incorrect or server not running
+    // No explicit throw here for missing env var, as we're using a fallback.
+    // However, if fetch itself fails, that's a runtime issue.
+    if (error instanceof TypeError && error.message.includes('fetch failed')) {
+        console.error(`Fetch failed for ${fetchUrl}. If using the default URL, ensure your local server is running on ${defaultAppUrl} and accessible.`);
+    }
     return null;
   }
 }
@@ -80,7 +86,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
         <AlertTriangle className="mx-auto h-12 w-12 text-destructive mb-4" />
         <h1 className="text-3xl font-bold mb-2">Product Not Found</h1>
         <p className="text-muted-foreground mb-6">
-          The product you are looking for (ID: {id}) does not exist or may have been removed.
+          The product you are looking for (ID: {id}) does not exist, may have been removed, or there was an issue fetching it.
         </p>
         <Link href="/" className="mt-6 inline-block">
            <Button variant="outline">
