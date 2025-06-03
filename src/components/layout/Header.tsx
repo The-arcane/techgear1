@@ -29,8 +29,8 @@ export function Header() {
   const [isClient, setIsClient] = useState(false);
 
   // Placeholder for auth state - currently hardcoded
-  const isAuthenticated = false;
-  const isAdmin = false;
+  const isAuthenticated = false; // Set to true to simulate logged-in user
+  const isAdmin = true; // Set to true to show Admin link
 
   useEffect(() => {
     setIsClient(true);
@@ -91,7 +91,7 @@ export function Header() {
               </Link>
             )}
             {isAdmin && (
-               <Link href="/admin" passHref legacyBehavior>
+               <Link href="/admin" passHref legacyBehavior={false}>
                 <Button variant="outline" size="sm" asChild={false}>
                   <PackageSearch className="mr-2 h-4 w-4" /> Admin
                 </Button>
@@ -133,9 +133,9 @@ export function Header() {
                       </Link>
                     )}
                      {isAdmin && (
-                      <Link href="/admin" passHref legacyBehavior>
-                        <a onClick={closeMobileMenu} className="text-lg font-medium text-foreground hover:text-primary transition-colors">
-                          Admin Panel
+                      <Link href="/admin" passHref legacyBehavior={false}>
+                        <a onClick={closeMobileMenu} className="text-lg font-medium text-foreground hover:text-primary transition-colors flex items-center">
+                          <PackageSearch className="mr-2 h-5 w-5" /> Admin Panel
                         </a>
                       </Link>
                     )}
