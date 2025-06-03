@@ -5,7 +5,7 @@ import { useEffect, useState, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { PackagePlus, ListOrdered, Settings, Users, LayoutGrid, Loader2, ShieldAlert, LogIn, ShoppingBasket, Activity, CheckCircle } from "lucide-react"; // Changed Clock to Activity
+import { PackagePlus, ListOrdered, Settings, Users, LayoutGrid, Loader2, ShieldAlert, LogIn, ShoppingBasket, Clock, CheckCircle } from "lucide-react";
 import type { OrderStatus } from "@/lib/types";
 import { supabase } from '@/lib/supabaseClient';
 import { useRouter } from 'next/navigation';
@@ -14,7 +14,7 @@ import type { User as AuthUserType } from '@supabase/supabase-js';
 interface StoreStats {
   totalProducts: number;
   totalOrders: number;
-  activeOrders: number; // Renamed from pendingOrders
+  pendingOrders: number;
   completedOrders: number;
 }
 
@@ -27,7 +27,7 @@ export default function AdminPage() {
   const [storeStats, setStoreStats] = useState<StoreStats>({
     totalProducts: 0,
     totalOrders: 0,
-    activeOrders: 0, // Renamed
+    pendingOrders: 0,
     completedOrders: 0,
   });
   const router = useRouter();
@@ -71,14 +71,14 @@ export default function AdminPage() {
       console.log(`[AdminPage] fetchStoreStats: Total orders query took ${Date.now() - ordersQueryStartTime}ms. Raw ordersCount: ${ordersCount}. Error:`, ordersError);
       if (ordersError) throw new Error(`Total orders fetch error: ${ordersError.message}`);
       
-      console.log("[AdminPage] fetchStoreStats: Fetching active (non-delivered) orders...");
-      const activeQueryStartTime = Date.now();
-      const { count: activeOrdersCount, error: activeError } = await supabase
+      console.log("[AdminPage] fetchStoreStats: Fetching pending orders...");
+      const pendingQueryStartTime = Date.now();
+      const { count: pendingOrdersCount, error: pendingError } = await supabase
         .from('orders')
         .select('*', { count: 'exact', head: true })
-        .not('status', 'eq', 'Delivered' as OrderStatus); // Changed query
-      console.log(`[AdminPage] fetchStoreStats: Active orders query took ${Date.now() - activeQueryStartTime}ms. Raw activeOrdersCount: ${activeOrdersCount}. Error:`, activeError);
-      if (activeError) throw new Error(`Active orders fetch error: ${activeError.message}`);
+        .eq('status', 'Pending' as OrderStatus);
+      console.log(`[AdminPage] fetchStoreStats: Pending orders query took ${Date.now() - pendingQueryStartTime}ms. Raw pendingOrdersCount: ${pendingOrdersCount}. Error:`, pendingError);
+      if (pendingError) throw new Error(`Pending orders fetch error: ${pendingError.message}`);
 
       console.log("[AdminPage] fetchStoreStats: Fetching completed orders...");
       const completedQueryStartTime = Date.now();
@@ -93,7 +93,7 @@ export default function AdminPage() {
         const newStats = {
           totalProducts: productsCount || 0,
           totalOrders: ordersCount || 0,
-          activeOrders: activeOrdersCount || 0, // Renamed and using new count
+          pendingOrders: pendingOrdersCount || 0,
           completedOrders: completedOrdersCount || 0,
         };
         setStoreStats(newStats);
@@ -103,7 +103,7 @@ export default function AdminPage() {
       console.error("[AdminPage] fetchStoreStats: Error fetching store stats:", error.message, error);
       if (isMounted.current) {
         setStatsError(error.message || "Failed to load store statistics.");
-        setStoreStats({ totalProducts: 0, totalOrders: 0, activeOrders: 0, completedOrders: 0 });
+        setStoreStats({ totalProducts: 0, totalOrders: 0, pendingOrders: 0, completedOrders: 0 });
       }
     } finally {
       if (isMounted.current) {
@@ -366,9 +366,9 @@ export default function AdminPage() {
                   <p className="text-sm text-muted-foreground">Total Orders</p>
                 </div>
                 <div className="p-4 bg-background rounded-lg shadow-sm">
-                  <Activity className="mx-auto h-8 w-8 text-blue-500 mb-2" /> 
-                  <p className="text-3xl font-bold">{storeStats.activeOrders}</p>
-                  <p className="text-sm text-muted-foreground">Active Orders</p>
+                  <Clock className="mx-auto h-8 w-8 text-yellow-500 mb-2" />
+                  <p className="text-3xl font-bold">{storeStats.pendingOrders}</p>
+                  <p className="text-sm text-muted-foreground">Pending Orders</p>
                 </div>
                 <div className="p-4 bg-background rounded-lg shadow-sm">
                   <CheckCircle className="mx-auto h-8 w-8 text-green-500 mb-2" />
