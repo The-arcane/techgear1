@@ -1,17 +1,4 @@
-"use client";
 
-import { Button } from "@/components/ui/button";
-
-export function PrintInvoiceButton() {
-  const handlePrintInvoice = () => {
-    // In a real application, this would trigger a print dialog
-    // or generate a PDF for printing.
-    alert("Mock action: Printing invoice...");
-  };
-
-  return (
-    <Button variant="secondary" onClick={handlePrintInvoice}>
-      Print Invoice
-    </Button>
-  );
-}
+// This file is no longer used and can be safely deleted.
+// Keeping it empty or adding a comment to signify its removal.
+// If you have a file deletion capability, this file should be removed from the project.
