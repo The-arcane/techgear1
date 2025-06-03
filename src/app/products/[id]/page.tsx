@@ -63,7 +63,8 @@ async function getProductById(productId: string): Promise<GetProductResult> {
       return { product: null, errorType: resolvedErrorType, errorMessage: `API Error ${res.status}: ${res.statusText}. Details: ${responseText}`, debugFetchUrl: fetchUrl };
     }
     const data = await res.json();
-    console.log(`(getProductById) Successfully fetched and parsed JSON for product ${productId}.`);
+    // Log the entire data structure received
+    console.log(`(getProductById) Successfully fetched and parsed JSON for product ${productId}. Response data:`, JSON.stringify(data));
     
     if (!data.product && data.message) {
         console.warn(`(getProductById) API returned success but product is null. Message: ${data.message}. URL: ${fetchUrl}`);
