@@ -23,7 +23,12 @@ export default async function OrdersPage() {
   
   console.log('[OrdersPage] User object from supabase.auth.getUser():', JSON.stringify(user, null, 2));
   if (authError) {
-    console.error('[OrdersPage] Error getting user session:', JSON.stringify(authError, null, 2));
+    console.error(
+      '[OrdersPage] Error getting user session. Name:', authError.name, 
+      'Message:', authError.message, 
+      'Status:', authError.status,
+      'Full Error:', JSON.stringify(authError, null, 2)
+    );
   }
 
   if (authError || !user) {
@@ -54,7 +59,7 @@ export default async function OrdersPage() {
     id: dbOrder.id.toString(),
     db_id: dbOrder.id,
     userId: dbOrder.user_id || '', 
-    userEmail: dbOrder.user_email, // Ensure this matches your type if changed
+    userEmail: dbOrder.user_email,
     items: [], 
     totalAmount: dbOrder.total_amount,
     status: dbOrder.status as OrderStatus || 'Pending',

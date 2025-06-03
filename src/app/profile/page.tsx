@@ -21,8 +21,12 @@ export default async function ProfilePage() {
   const { data: { user }, error: authUserError } = await supabase.auth.getUser();
 
   if (authUserError) {
-    console.error('[ProfilePage] Error getting user session:', JSON.stringify(authUserError, null, 2));
-    // Potentially redirect or show an error, but if user is null, the next block handles redirect.
+    console.error(
+      '[ProfilePage] Error getting user session. Name:', authUserError.name,
+      'Message:', authUserError.message,
+      'Status:', authUserError.status,
+      'Full Error:', JSON.stringify(authUserError, null, 2)
+    );
   }
   console.log('[ProfilePage] User object from supabase.auth.getUser():', JSON.stringify(user, null, 2));
 
