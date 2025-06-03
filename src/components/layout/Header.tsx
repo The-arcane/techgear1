@@ -2,7 +2,7 @@
 "use client";
 
 import Link from 'next/link';
-import { ShoppingCart, User, LogIn, Menu, PackageSearch, LogOut, X } from 'lucide-react'; // Added X here
+import { ShoppingCart, User, LogIn, Menu, PackageSearch, LogOut, X as CloseIcon } from 'lucide-react';
 import { Logo } from '@/components/shared/Logo';
 import { Button } from '@/components/ui/button';
 import { useCart } from '@/contexts/CartContext';
@@ -14,6 +14,8 @@ import {
 import { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation'; 
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from '@/lib/supabaseClient';
+import type { User as AuthUser } from '@supabase/supabase-js';
 
 const navLinks = [
   { href: '/', label: 'Home' },
@@ -29,54 +31,60 @@ export function Header() {
   const { itemCount } = useCart();
   const { toast } = useToast();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isClient, setIsClient] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [isAdminUser, setIsAdminUser] = useState(false);
   const [userName, setUserName] = useState<string | null>(null);
+  
   const router = useRouter();
   const pathname = usePathname(); 
 
   useEffect(() => {
-    setIsClient(true);
-    const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
-    const storedUser = typeof window !== 'undefined' ? localStorage.getItem('authUser') : null;
-    
-    if (token && storedUser) {
-      setIsAuthenticated(true);
-      try {
-        const user = JSON.parse(storedUser);
-        setUserName(user?.name || user?.email || null);
-        if (user && user.role === 'admin') {
-          setIsAdminUser(true);
-        } else {
-          setIsAdminUser(false);
-        }
-      } catch (e) {
-        console.error("Failed to parse authUser from localStorage", e);
-        setIsAdminUser(false);
-        setUserName(null);
-      }
+    const getSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      setAuthUser(session?.user ?? null);
+    };
+    getSession();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      setAuthUser(session?.user ?? null);
+    });
+
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (authUser) {
+      // For user name, prioritize profile data if fetched, then user_metadata, then email
+      // This part would typically involve fetching from your 'profiles' table
+      // For now, using user_metadata.full_name or email
+      setUserName(authUser.user_metadata?.full_name || authUser.email || null);
+      
+      // Admin check: This is a simplified check.
+      // In a real app, use custom claims (e.g., authUser.app_metadata?.claims_admin)
+      // or check a role from your 'profiles' or a dedicated 'user_roles' table.
+      const isAdmin = authUser.email === 'raunaq.adlakha@gmail.com' || authUser.user_metadata?.role === 'admin';
+      setIsAdminUser(isAdmin);
+
     } else {
-      setIsAuthenticated(false);
-      setIsAdminUser(false);
       setUserName(null);
+      setIsAdminUser(false);
     }
-  }, [pathname]); 
+  }, [authUser]);
 
   const closeMobileMenu = () => setIsMobileMenuOpen(false);
 
-  const handleLogout = () => {
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('authToken');
-      localStorage.removeItem('authUser');
-    }
-    setIsAuthenticated(false);
-    setIsAdminUser(false);
-    setUserName(null);
+  const handleLogout = async () => {
+    const { error } = await supabase.auth.signOut();
     closeMobileMenu();
-    toast({ title: "Logged Out", description: "You have been successfully logged out." });
-    router.push('/login');
-    // router.refresh(); // Not always needed after push, can cause extra renders
+    if (error) {
+      toast({ title: "Logout Failed", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Logged Out", description: "You have been successfully logged out." });
+      router.push('/login'); // Redirect to login after logout
+      router.refresh(); // Refresh to ensure layout updates
+    }
   };
   
   const CartLinkPlaceholder = () => (
@@ -84,6 +92,10 @@ export function Header() {
       <ShoppingCart className="h-5 w-5 text-muted-foreground/50" />
     </Button>
   );
+
+  // Check if component has mounted to avoid hydration issues with authUser state
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -103,8 +115,8 @@ export function Header() {
         </nav>
 
         <div className="flex items-center space-x-2 sm:space-x-4">
-          {isClient ? (
-            <Link href="/cart" passHref legacyBehavior={false}>
+          {mounted ? (
+            <Link href="/cart">
               <Button variant="ghost" size="icon" aria-label="Shopping Cart" className="relative">
                 <ShoppingCart className="h-5 w-5" />
                 {itemCount > 0 && (
@@ -119,11 +131,12 @@ export function Header() {
           )}
 
           <div className="hidden md:flex items-center space-x-2">
-            {isClient && isAuthenticated ? (
+            {mounted && authUser ? (
               <>
                 <Link href="/orders">
                   <Button variant="ghost" size="sm" aria-label="My Account" className="flex items-center">
-                    <User className="h-5 w-5 mr-1" /> {userName ? <span className="text-sm truncate max-w-[100px]">{userName.split(' ')[0]}</span> : 'Account'}
+                    <User className="h-5 w-5 mr-1" /> 
+                    {userName ? <span className="text-sm truncate max-w-[100px]">{userName.split(' ')[0]}</span> : 'Account'}
                   </Button>
                 </Link>
                 {isAdminUser && (
@@ -137,7 +150,7 @@ export function Header() {
                   <LogOut className="mr-2 h-4 w-4" /> Logout
                 </Button>
               </>
-            ) : isClient ? (
+            ) : mounted ? (
               <Link href="/login">
                 <Button variant="ghost" size="sm">
                   <LogIn className="mr-2 h-4 w-4" /> Login
@@ -159,7 +172,7 @@ export function Header() {
                   <div className="mb-6 flex justify-between items-center">
                     <Logo />
                      <Button variant="ghost" size="icon" onClick={closeMobileMenu} className="md:hidden">
-                        <X className="h-6 w-6" /> {/* Ensure X is imported and used */}
+                        <CloseIcon className="h-6 w-6" />
                         <span className="sr-only">Close menu</span>
                     </Button>
                   </div>
@@ -175,7 +188,7 @@ export function Header() {
                       </Link>
                     ))}
                     <hr/>
-                    {isClient && isAuthenticated ? (
+                    {mounted && authUser ? (
                       <>
                         <Link href="/orders" onClick={closeMobileMenu} className="text-lg font-medium text-foreground hover:text-primary transition-colors flex items-center">
                            <User className="mr-2 h-5 w-5" /> {userName || 'My Orders'}
@@ -189,7 +202,7 @@ export function Header() {
                           <LogOut className="mr-2 h-5 w-5" /> Logout
                         </Button>
                       </>
-                    ) : isClient ? (
+                    ) : mounted ? (
                       <Link href="/login" onClick={closeMobileMenu} className="text-lg font-medium text-foreground hover:text-primary transition-colors flex items-center">
                          <LogIn className="mr-2 h-5 w-5" /> Login / Signup
                       </Link>

@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import Link from "next/link";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabaseClient';
 
 export function LoginForm() {
   const [email, setEmail] = useState('');
@@ -21,34 +22,23 @@ export function LoginForm() {
     e.preventDefault();
     setIsLoading(true);
 
-    try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: email,
+      password: password,
+    });
 
-      const result = await response.json();
+    setIsLoading(false);
 
-      if (response.ok && result.success && result.token && result.user) {
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('authToken', result.token);
-          localStorage.setItem('authUser', JSON.stringify(result.user));
-        }
-        toast({ title: "Login Successful", description: "Welcome back!" });
-        // Check if user is admin, if so redirect to admin, else to home
-        // This form is for general users, AdminLoginForm handles admin-specific redirection
-        router.push('/'); 
-        router.refresh(); // To re-trigger header auth check
-      } else {
-        const errorMsg = result.message || "Login failed. Please check your credentials.";
-        toast({ title: "Login Failed", description: errorMsg, variant: "destructive" });
-      }
-    } catch (error) {
-      console.error("Login form error:", error);
-      toast({ title: "Error", description: "An unexpected error occurred.", variant: "destructive" });
-    } finally {
-      setIsLoading(false);
+    if (error) {
+      toast({ title: "Login Failed", description: error.message, variant: "destructive" });
+    } else if (data.user && data.session) {
+      toast({ title: "Login Successful", description: "Welcome back!" });
+      // Supabase client automatically handles session persistence (e.g., in localStorage)
+      // The Header component will react to auth state changes.
+      router.push('/'); 
+      router.refresh(); // Useful to ensure server components re-fetch data if auth state changes visibility
+    } else {
+      toast({ title: "Login Failed", description: "Invalid email or password.", variant: "destructive" });
     }
   };
 

@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import Link from "next/link";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabaseClient';
 
 export function SignupForm() {
   const [name, setName] = useState('');
@@ -27,29 +28,31 @@ export function SignupForm() {
     }
     setIsLoading(true);
 
-    try {
-      const response = await fetch('/api/auth/signup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password }),
-      });
-
-      const result = await response.json();
-
-      if (response.ok && result.success) {
-        toast({ title: "Signup Successful", description: result.message });
-        router.push('/login'); // Redirect to login page after successful signup
-      } else {
-        const errorMsg = result.errors ? 
-          Object.values(result.errors).flat().join(', ') : 
-          result.message || "Signup failed. Please try again.";
-        toast({ title: "Signup Failed", description: errorMsg, variant: "destructive" });
+    const { data, error } = await supabase.auth.signUp({
+      email: email,
+      password: password,
+      options: {
+        data: {
+          full_name: name,
+        }
       }
-    } catch (error) {
-      console.error("Signup form error:", error);
-      toast({ title: "Error", description: "An unexpected error occurred.", variant: "destructive" });
-    } finally {
-      setIsLoading(false);
+    });
+
+    setIsLoading(false);
+
+    if (error) {
+      toast({ title: "Signup Failed", description: error.message, variant: "destructive" });
+    } else if (data.user) {
+      // data.user.identities?.length === 0 means user might already exist but is unconfirmed.
+      // data.session === null when email confirmation is required.
+      if (data.user.identities && data.user.identities.length === 0) {
+         toast({ title: "User may already exist", description: "If you've signed up before, please check your email to confirm or try logging in.", variant: "default" });
+      } else {
+        toast({ title: "Signup Successful!", description: "Please check your email to confirm your account." });
+      }
+      router.push('/login'); // Redirect to login page after successful signup attempt
+    } else {
+        toast({ title: "Signup Failed", description: "An unexpected error occurred. Please try again.", variant: "destructive" });
     }
   };
 

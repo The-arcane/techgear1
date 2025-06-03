@@ -1,8 +1,8 @@
 
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { supabase } from '@/lib/supabaseClient';
-import crypto from 'crypto'; // Import crypto module
+// import { supabase } from '@/lib/supabaseClient'; // Supabase client is not used here anymore for direct profile insertion.
+// import crypto from 'crypto'; // No longer needed for random UUID generation here.
 
 const signupSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
@@ -11,6 +11,16 @@ const signupSchema = z.object({
 });
 
 export async function POST(request: Request) {
+  // This API route is now more of a placeholder.
+  // The primary signup logic (creating a user in `auth.users`) should be handled
+  // on the client-side by calling `supabase.auth.signUp()`.
+  // The `profiles` table entry should ideally be created using Supabase Database Triggers
+  // that listen for new users in `auth.users` and use the `options.data` (e.g., full_name)
+  // passed during `supabase.auth.signUp()`.
+
+  // This route could be used for auxiliary server-side actions post-signup if needed,
+  // but not for the initial user creation or profile insertion if using standard Supabase patterns.
+
   try {
     const body = await request.json();
     const validation = signupSchema.safeParse(body);
@@ -19,54 +29,22 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, message: "Invalid input.", errors: validation.error.flatten().fieldErrors }, { status: 400 });
     }
 
-    const { name, email, password } = validation.data;
+    // const { name, email, password } = validation.data;
 
-    // --- IMPORTANT NOTE ON SUPABASE AUTHENTICATION ---
-    // The following code attempts to directly insert into the 'profiles' table.
-    // This will LIKELY FAIL if the 'id' used for the profile does not already exist
-    // in the 'auth.users' table (which is populated by Supabase Authentication).
-    //
-    // THE CORRECT AND COMPLETE SUPABASE AUTHENTICATION FLOW TYPICALLY INVOLVES:
-    // 1. Client-side: Call `supabase.auth.signUp({ email, password, options: { data: { full_name: name } } })`.
-    //    This creates the user in `auth.users` and handles email confirmation.
-    // 2. Server-side (optional, or via Supabase Triggers): If you need to store additional profile data
-    //    not handled by `auth.users` metadata, you would use the `user.id` from the
-    //    `auth.signUp` response to insert into your `profiles` table.
-    //
-    // This API route, as it stands, is a simplified step. If you encounter foreign key
-    // constraint errors (like "profiles_id_fkey"), it's because the `id` being inserted
-    // into `profiles` doesn't exist in `auth.users`.
-    // The long-term solution is to integrate `supabase.auth.signUp()` on the client-side.
-    // --- END IMPORTANT NOTE ---
-
-    const userIdForProfile = crypto.randomUUID(); // Generate a valid UUID.
-
-    const { data: profileData, error: profileError } = await supabase
-      .from('profiles')
-      .insert([{ id: userIdForProfile, full_name: name }]) // Attempt to insert the profile.
-      .select();
-
-    if (profileError) {
-      console.error('Supabase Profile Creation Error:', profileError);
-      // Check for specific foreign key violation error
-      if (profileError.code === '23503') { // PostgreSQL error code for foreign_key_violation
-         return NextResponse.json({ 
-            success: false, 
-            message: `Profile creation failed: User ID ${userIdForProfile} does not exist in authenticated users. Please ensure Supabase Auth signup process is completed first.`,
-            details: profileError.message 
-        }, { status: 409 }); // Conflict or Bad Request
-      }
-      return NextResponse.json({ success: false, message: profileError.message || "Profile creation failed." }, { status: 500 });
-    }
+    // Since client-side handles `supabase.auth.signUp()`, this API route's role changes.
+    // If you still need server-side logic after client-side signUp (e.g. sending a welcome email
+    // through a different service, or complex profile setup not handled by triggers),
+    // this API could be called by the client *after* a successful supabase.auth.signUp().
+    // For now, it will just acknowledge.
 
     return NextResponse.json({
       success: true,
-      message: "Signup attempt processed. Profile creation attempted. Please check your Supabase dashboard and console for details. For full functionality, integrate Supabase client-side auth.",
-      user: profileData ? profileData[0] : null
-    }, { status: 201 });
+      message: "Signup request acknowledged. Primary user creation is handled client-side with Supabase Auth. Ensure profile creation is handled by triggers or subsequent client logic.",
+      // user: null // No user data is created or returned by this specific API endpoint now.
+    }, { status: 200 }); // Changed status to 200 as it's just an acknowledgement
 
   } catch (error) {
-    console.error('API Signup Error:', error);
+    console.error('API Signup (Placeholder) Error:', error);
     const errorMessage = error instanceof Error ? error.message : "An unexpected error occurred.";
     return NextResponse.json({ success: false, message: errorMessage }, { status: 500 });
   }

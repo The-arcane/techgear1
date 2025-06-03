@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import Link from "next/link";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabaseClient';
 
 export function AdminLoginForm() {
   const [email, setEmail] = useState('raunaq.adlakha@gmail.com'); // Pre-fill for convenience
@@ -21,35 +22,34 @@ export function AdminLoginForm() {
     e.preventDefault();
     setIsLoading(true);
 
-    try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: email,
+      password: password,
+    });
+    
+    setIsLoading(false);
 
-      const result = await response.json();
+    if (error) {
+      toast({ title: "Admin Login Failed", description: error.message, variant: "destructive" });
+    } else if (data.user && data.session) {
+      // Check for admin role. This is a placeholder.
+      // In a real Supabase app, roles can be managed via custom claims or a separate 'roles' table.
+      // For custom claims, you might check: data.user.app_metadata?.claims_admin === true
+      // Or, you might have a 'role' field in user_metadata, e.g. data.user.user_metadata?.role === 'admin'
+      // For this example, we'll check a mock 'role' in user_metadata or if email matches your admin email.
+      const isAdmin = data.user.email === 'raunaq.adlakha@gmail.com' || data.user.user_metadata?.role === 'admin';
 
-      if (response.ok && result.success && result.user && result.user.role === 'admin' && result.token) {
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('authToken', result.token);
-          localStorage.setItem('authUser', JSON.stringify(result.user));
-        }
+      if (isAdmin) {
         toast({ title: "Admin Login Successful", description: "Redirecting to admin panel..." });
+        // Supabase client handles session persistence.
         router.push('/admin');
-        router.refresh(); // To re-trigger header auth check
-      } else if (response.ok && result.success && result.user && result.user.role !== 'admin') {
-        toast({ title: "Login Failed", description: "Not an admin account.", variant: "destructive" });
+        router.refresh();
+      } else {
+        await supabase.auth.signOut(); // Sign out non-admin users immediately
+        toast({ title: "Login Failed", description: "Not an authorized admin account.", variant: "destructive" });
       }
-      else {
-        const errorMsg = result.message || "Admin login failed. Please check your credentials.";
-        toast({ title: "Admin Login Failed", description: errorMsg, variant: "destructive" });
-      }
-    } catch (error) {
-      console.error("Admin login form error:", error);
-      toast({ title: "Error", description: "An unexpected error occurred.", variant: "destructive" });
-    } finally {
-      setIsLoading(false);
+    } else {
+       toast({ title: "Admin Login Failed", description: "Invalid email or password.", variant: "destructive" });
     }
   };
 
