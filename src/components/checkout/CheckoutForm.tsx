@@ -47,17 +47,13 @@ export function CheckoutForm() {
     }
 
     try {
-      // 1. Create the order
-      // Note: Your 'orders' table schema does not explicitly list 'shipping_address' or 'user_email'.
-      // The code below includes them. If these columns don't exist, the insert will fail.
-      // It's recommended to add `shipping_address JSONB` and `user_email TEXT` to your `orders` table.
       const orderToInsert: SupabaseOrderInsert = {
         user_id: user.id,
-        user_email: user.email, // Assumes you want to store this; add column to Supabase if needed
-        shipping_address: shippingAddress, // Assumes you want to store this; add column (JSONB) to Supabase if needed
+        user_email: user.email, // This column might be missing in your 'orders' table
+        shipping_address: shippingAddress, // This column (expected JSONB) might be missing
         total_amount: getCartTotal(),
-        status: 'Pending', 
-        payment_mode: 'COD', // Matches your table's 'payment_mode'
+        status: 'Pending',
+        payment_mode: 'COD', // Matches your 'orders' table schema for payment_mode
       };
 
       const { data: newOrderData, error: orderError } = await supabase
@@ -67,15 +63,14 @@ export function CheckoutForm() {
         .single();
 
       if (orderError || !newOrderData) {
-        console.error('Error creating order:', orderError);
-        toast({ title: "Order Placement Failed", description: orderError?.message || "Could not save order. Check if 'shipping_address' and 'user_email' columns exist in your 'orders' table.", variant: "destructive", duration: 10000 });
+        console.error('Error creating order. orderError object:', JSON.stringify(orderError, null, 2), 'newOrderData:', newOrderData);
+        toast({ title: "Order Placement Failed", description: (orderError as any)?.message || "Could not save order. Check if 'shipping_address' and 'user_email' columns exist in your 'orders' table, or check console for details.", variant: "destructive", duration: 10000 });
         setIsLoading(false);
         return;
       }
 
       const newOrderId = newOrderData.id;
 
-      // 2. Create order items and update stock
       const orderItemsToInsert: SupabaseOrderItemInsert[] = [];
       let stockUpdateError = false;
 
@@ -83,8 +78,8 @@ export function CheckoutForm() {
         const productIdInt = parseInt(item.productId, 10);
         if (isNaN(productIdInt)) {
             console.error(`Invalid product ID for item ${item.name}: ${item.productId}. Skipping item.`);
-            stockUpdateError = true; 
-            continue; 
+            stockUpdateError = true;
+            continue;
         }
 
         orderItemsToInsert.push({
@@ -97,22 +92,20 @@ export function CheckoutForm() {
         const { data: productData, error: productFetchError } = await supabase
           .from('products')
           .select('stock')
-          .eq('id', productIdInt) 
+          .eq('id', productIdInt)
           .single();
 
         if (productFetchError || !productData) {
           console.error(`Error fetching stock for product ${productIdInt}:`, productFetchError);
           stockUpdateError = true;
-          continue; 
+          continue;
         }
 
-        const currentStock = productData.stock || 0; // Default to 0 if stock is null
+        const currentStock = productData.stock || 0;
         const newStock = currentStock - item.quantity;
 
         if (newStock < 0) {
           console.warn(`Product ${productIdInt} stock cannot go below 0. Clamping to 0.`);
-          // This check is important. Ideally, cart addition logic also prevents this.
-          // For now, clamp stock to 0 if over-sold.
           const { error: stockClampError } = await supabase
             .from('products')
             .update({ stock: 0 })
@@ -121,13 +114,13 @@ export function CheckoutForm() {
             console.error(`Error clamping stock for product ${productIdInt}:`, stockClampError);
             stockUpdateError = true;
           }
-          continue; 
+          continue;
         }
         
         const { error: stockUpdateDbError } = await supabase
           .from('products')
           .update({ stock: newStock })
-          .eq('id', productIdInt); 
+          .eq('id', productIdInt);
 
         if (stockUpdateDbError) {
           console.error(`Error updating stock for product ${productIdInt}:`, stockUpdateDbError);
@@ -141,8 +134,8 @@ export function CheckoutForm() {
             .insert(orderItemsToInsert);
 
         if (orderItemsError) {
-            console.error('Error creating order items:', orderItemsError);
-            toast({ title: "Order Items Failed", description: orderItemsError.message, variant: "destructive" });
+            console.error('Error creating order items:', JSON.stringify(orderItemsError, null, 2));
+            toast({ title: "Order Items Failed", description: (orderItemsError as any)?.message || "Could not save order items.", variant: "destructive" });
             // Attempt to delete the created order if items fail
             await supabase.from('orders').delete().eq('id', newOrderId);
             setIsLoading(false);
@@ -150,21 +143,20 @@ export function CheckoutForm() {
         }
       }
 
-
       if (stockUpdateError) {
-        toast({ title: "Order Placed with Issues", description: `Order #${newOrderId} created, but some stock updates may have failed or items were out of stock. Please contact support.`, variant: "destructive", duration: 10000 });
+        toast({ title: "Order Placed with Issues", description: `Order #${newOrderId} created, but some stock updates or item processing may have failed. Please check order details or contact support.`, variant: "destructive", duration: 10000 });
       } else {
         toast({ title: "Order Placed!", description: `Your order #${newOrderId} has been successfully placed.` });
       }
 
       clearCart();
       setIsLoading(false);
-      router.push(`/order-confirmation/${newOrderId}`); // Use the actual DB order ID
-      router.refresh(); 
+      router.push(`/order-confirmation/${newOrderId}`);
+      router.refresh();
 
     } catch (error) {
-      console.error('Checkout process error:', error);
-      toast({ title: "Checkout Error", description: error instanceof Error ? error.message : "An unexpected error occurred.", variant: "destructive" });
+      console.error('Checkout process error:', error instanceof Error ? error.message : JSON.stringify(error));
+      toast({ title: "Checkout Error", description: error instanceof Error ? error.message : "An unexpected error occurred during checkout.", variant: "destructive" });
       setIsLoading(false);
     }
   };
@@ -191,7 +183,6 @@ export function CheckoutForm() {
               <Label htmlFor="fullName">Full Name</Label>
               <Input id="fullName" name="fullName" required value={shippingAddress.fullName} onChange={handleInputChange} disabled={isLoading} />
             </div>
-            {/* Email is tied to account, no separate input here; will be taken from auth user */}
           </div>
           <div className="space-y-2">
             <Label htmlFor="address">Street Address</Label>
