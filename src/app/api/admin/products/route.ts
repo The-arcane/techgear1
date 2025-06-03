@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
         category: categorySlug, // Storing slug in category column
         price,
         stock,
-        image_url: imageUrl1 || null, // Use null if empty string after validation
+        image_url: imageUrl1 === '' ? null : imageUrl1, // Explicitly use null for empty string
       })
       .select()
       .single();
@@ -72,30 +72,34 @@ export async function POST(request: NextRequest) {
     if (error) {
       console.error('Supabase error creating product:', JSON.stringify(error, null, 2));
       let userFriendlyMessage = 'Failed to add product to database. Check server logs for details.';
-      let detailedError = error.message; // Default to raw message
+      let detailedError = error.message;
 
       // Log the specific error message we are checking against for RLS
       console.log('Checking error message for RLS policy violation. Raw Supabase error message:', error.message);
 
       if (error.message.toLowerCase().includes('violates row-level security policy') || error.message.toLowerCase().includes('permission denied')) {
         userFriendlyMessage = 'Product creation failed due to a security policy. Please ensure you have admin privileges and that Row Level Security (RLS) policies are correctly set up on the "products" table in Supabase to allow admin inserts. Specifically, check that your user ID is in the "admins" table if RLS relies on it.';
-        detailedError = error.message;
       } else if (error.code === '23505') { // Unique constraint violation
-        userFriendlyMessage = 'Failed to add product: A product with similar unique details (e.g., name or another unique field specified in your database schema) already exists.';
+        userFriendlyMessage = `Failed to add product: A product with similar unique details (e.g., name or ${error.details || 'another unique field'}) already exists.`;
         detailedError = `Database unique constraint (code: 23505) violated: ${error.details || error.message}`;
       } else if (error.code === '23502') { // Not-null violation
-        userFriendlyMessage = 'Failed to add product: A required field was missing or empty, which violates a not-null constraint in your database.';
+        userFriendlyMessage = `Failed to add product: A required field was missing or empty. Detail: ${error.details || error.message}.`;
         detailedError = `Database not-null constraint (code: 23502) violated: ${error.details || error.message}`;
       } else if (error.code === '23503') { // Foreign key violation
-        userFriendlyMessage = 'Failed to add product: A related record (e.g., a category ID that does not exist) caused a foreign key violation.';
+        userFriendlyMessage = `Failed to add product: A related record (e.g., a category specified by '${categorySlug}') caused a foreign key violation. Detail: ${error.details || error.message}.`;
         detailedError = `Database foreign key constraint (code: 23503) violated: ${error.details || error.message}`;
+      } else if (error.code === '22P02') { // Invalid text representation (e.g. trying to put text into a number field directly in DB)
+        userFriendlyMessage = `Failed to add product: Invalid data format for one of the fields. Detail: ${error.details || error.message}.`;
+        detailedError = `Database invalid data format (code: 22P02) violated: ${error.details || error.message}`;
       }
-      // Add more specific checks if needed, e.g., for data type mismatches if Supabase provides distinct codes.
+
 
       return NextResponse.json({
         success: false,
-        message: userFriendlyMessage, // This will be shown in the toast and console.error on client
-        error: detailedError // This provides more specific DB error info, also available client-side if needed
+        message: userFriendlyMessage,
+        error: detailedError, // This provides more specific DB error info
+        supabase_code: error.code, // Send Supabase code to client for more context if needed
+        supabase_details: error.details
       }, { status: 500 });
     }
 
