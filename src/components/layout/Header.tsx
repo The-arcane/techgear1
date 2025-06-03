@@ -3,7 +3,7 @@
 
 import React from 'react'; // Ensure React is imported first
 import Link from 'next/link';
-import { ShoppingCart, User, LogIn, Menu, PackageSearch, LogOut, X as CloseIcon, ChevronDown } from 'lucide-react';
+import { ShoppingCart, User, LogIn, Menu, PackageSearch, LogOut, X as CloseIcon, ChevronDown, ListOrdered, UserCircle as UserProfileIcon } from 'lucide-react';
 import { Logo } from '@/components/shared/Logo';
 import { Button } from '@/components/ui/button';
 import { useCart } from '@/contexts/CartContext';
@@ -24,7 +24,6 @@ import { useRouter } from 'next/navigation';
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from '@/lib/supabaseClient';
 import type { User as AuthUser } from '@supabase/supabase-js';
-import type { SupabaseAdmin } from '@/lib/types';
 
 const mainNavLinks = [
   { href: '/', label: 'Home' },
@@ -74,7 +73,7 @@ export function Header() {
         if (profileError && profileError.code !== 'PGRST116') { // PGRST116: row not found
           console.error("Error fetching profile:", profileError.message);
         }
-        setUserName(profileData?.full_name || user.user_metadata?.full_name || user.email || null);
+        setUserName(profileData?.full_name || user.user_metadata?.full_name || user.email?.split('@')[0] || "User");
 
         const { data: adminData, error: adminError } = await supabase
           .from('admins')
@@ -111,7 +110,7 @@ export function Header() {
         if (profileError && profileError.code !== 'PGRST116') {
           console.error("Error fetching profile on auth change:", profileError.message);
         }
-        setUserName(profileData?.full_name || user.user_metadata?.full_name || user.email || null);
+        setUserName(profileData?.full_name || user.user_metadata?.full_name || user.email?.split('@')[0] || "User");
         
         const { data: adminData, error: adminError } = await supabase
           .from('admins')
@@ -130,7 +129,6 @@ export function Header() {
         setIsAdminUser(false);
       }
       setIsLoadingAuth(false);
-      // router.refresh(); // Refresh to update server components if needed, but be cautious with layout shifts
     });
 
     return () => {
@@ -149,9 +147,7 @@ export function Header() {
       toast({ title: "Logout Failed", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Logged Out", description: "You have been successfully logged out." });
-      // Auth state will update via onAuthStateChange listener
     }
-    // No need to manually setAuthUser, setIsAdminUser, setUserName here as onAuthStateChange handles it.
     router.push('/login'); 
     router.refresh(); 
     setIsLoadingAuth(false);
@@ -221,22 +217,38 @@ export function Header() {
               <Button variant="ghost" size="sm" disabled><LogIn className="mr-2 h-4 w-4" /> Loading...</Button>
             ) : authUser ? (
               <>
-                <Link href="/orders">
-                  <Button variant="ghost" size="sm" aria-label="My Account" className="flex items-center">
-                    <User className="h-5 w-5 mr-1" /> 
-                    {userName ? <span className="text-sm truncate max-w-[100px]">{userName.split(' ')[0]}</span> : 'Account'}
-                  </Button>
-                </Link>
-                {isAdminUser && (
-                  <Link href="/admin">
-                    <Button variant="outline" size="sm">
-                      <PackageSearch className="mr-2 h-4 w-4" /> Admin
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="sm" aria-label="My Account" className="flex items-center">
+                      <User className="h-5 w-5 mr-1" /> 
+                      {userName ? <span className="text-sm truncate max-w-[100px]">{userName.split(' ')[0]}</span> : 'Account'}
+                       <ChevronDown className="ml-1 h-4 w-4 opacity-70" />
                     </Button>
-                  </Link>
-                )}
-                <Button variant="ghost" size="sm" onClick={handleLogout}>
-                  <LogOut className="mr-2 h-4 w-4" /> Logout
-                </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem asChild>
+                      <Link href="/profile" className="flex items-center w-full">
+                        <UserProfileIcon className="mr-2 h-4 w-4" /> My Profile
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                       <Link href="/orders" className="flex items-center w-full">
+                        <ListOrdered className="mr-2 h-4 w-4" /> Order History
+                      </Link>
+                    </DropdownMenuItem>
+                    {isAdminUser && (
+                      <DropdownMenuItem asChild>
+                        <Link href="/admin" className="flex items-center w-full">
+                            <PackageSearch className="mr-2 h-4 w-4" /> Admin Panel
+                        </Link>
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={handleLogout} className="flex items-center w-full cursor-pointer">
+                      <LogOut className="mr-2 h-4 w-4" /> Logout
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </>
             ) : (
               <Link href="/login">
@@ -298,15 +310,23 @@ export function Header() {
                        <p className="py-2 text-lg font-medium text-muted-foreground flex items-center">Loading user...</p>
                     ): authUser ? (
                       <>
-                        <Link href="/orders" onClick={closeMobileMenu} className="py-2 text-lg font-medium text-foreground hover:text-primary transition-colors flex items-center">
-                           <User className="mr-2 h-5 w-5" /> {userName || 'My Orders'}
-                        </Link>
-                        {isAdminUser && (
-                          <Link href="/admin" onClick={closeMobileMenu} className="py-2 text-lg font-medium text-foreground hover:text-primary transition-colors flex items-center">
-                              <PackageSearch className="mr-2 h-5 w-5" /> Admin Panel
+                        <p className="py-2 text-lg font-medium text-foreground flex items-center">
+                           <User className="mr-2 h-5 w-5" /> {userName || 'My Account'}
+                        </p>
+                        <div className="flex flex-col space-y-1 pl-3 border-l border-muted">
+                          <Link href="/profile" onClick={closeMobileMenu} className="py-1.5 text-md text-foreground/80 hover:text-primary transition-colors flex items-center">
+                            <UserProfileIcon className="mr-2 h-4 w-4" /> My Profile
                           </Link>
-                        )}
-                        <Button variant="outline" onClick={handleLogout} className="w-full justify-start text-lg py-3 mt-2">
+                          <Link href="/orders" onClick={closeMobileMenu} className="py-1.5 text-md text-foreground/80 hover:text-primary transition-colors flex items-center">
+                              <ListOrdered className="mr-2 h-4 w-4" /> Order History
+                          </Link>
+                          {isAdminUser && (
+                            <Link href="/admin" onClick={closeMobileMenu} className="py-1.5 text-md text-foreground/80 hover:text-primary transition-colors flex items-center">
+                                <PackageSearch className="mr-2 h-4 w-4" /> Admin Panel
+                            </Link>
+                          )}
+                        </div>
+                        <Button variant="outline" onClick={handleLogout} className="w-full justify-start text-lg py-3 mt-4">
                           <LogOut className="mr-2 h-5 w-5" /> Logout
                         </Button>
                       </>
