@@ -6,6 +6,7 @@ import type { Product, SupabaseProduct } from '@/lib/types';
 // Helper to slugify category names (consistent with the all products route)
 const slugify = (text: string) => text.toLowerCase().replace(/\s+/g, '-');
 const DEFAULT_PLACEHOLDER_IMAGE = 'https://placehold.co/600x400.png';
+const DEFAULT_CATEGORY_SLUG = 'uncategorized';
 
 export async function GET(request: Request, { params }: { params: { id: string } }) {
   const { id } = params;
@@ -36,10 +37,12 @@ export async function GET(request: Request, { params }: { params: { id: string }
         console.log(`[/api/products/[id]] Product with ID ${productId} not found in Supabase (PGRST116).`);
         return NextResponse.json({ message: `Product with ID ${id} not found.` }, { status: 404 });
       }
+      // Log other Supabase errors but return a generic 500 for them.
       return NextResponse.json({ message: 'Failed to fetch product from database.', error: error.message }, { status: 500 });
     }
 
     if (!productData) {
+      // This case should ideally be covered by PGRST116, but as a fallback.
       console.log(`[/api/products/[id]] Product data is null for ID ${productId} after Supabase query (no error, but no data).`);
       return NextResponse.json({ message: `Product with ID ${id} not found.` }, { status: 404 });
     }
@@ -47,22 +50,35 @@ export async function GET(request: Request, { params }: { params: { id: string }
     console.log(`[/api/products/[id]] Successfully fetched product data for ID ${productId}:`, JSON.stringify(productData, null, 2));
     const typedProductData = productData as SupabaseProduct;
 
+    let categorySlugValue = DEFAULT_CATEGORY_SLUG;
+    if (typedProductData.category && typeof typedProductData.category === 'string' && typedProductData.category.trim() !== '') {
+      try {
+        categorySlugValue = slugify(typedProductData.category);
+      } catch (e) {
+        console.error(`[/api/products/[id]] Error slugifying category '${typedProductData.category}' for product ID ${productId}:`, e);
+        // Keep default slug if slugify fails
+      }
+    } else {
+      console.warn(`[/api/products/[id]] Product ID ${productId} has a null, empty, or non-string category. Defaulting slug to '${DEFAULT_CATEGORY_SLUG}'. Category was:`, typedProductData.category);
+    }
+
     const product: Product = {
       id: typedProductData.id.toString(),
       name: typedProductData.name,
-      description: typedProductData.description,
-      categorySlug: slugify(typedProductData.category),
+      description: typedProductData.description || '', // Ensure description is not null
+      categorySlug: categorySlugValue,
       price: typedProductData.price,
-      images: [typedProductData.image_url || DEFAULT_PLACEHOLDER_IMAGE], // Use image_url or fallback
-      specifications: {}, // Placeholder
-      stock: typedProductData.stock,
+      images: [typedProductData.image_url || DEFAULT_PLACEHOLDER_IMAGE],
+      specifications: {}, // Placeholder, ensure this field exists on SupabaseProduct or handle if it doesn't
+      stock: typedProductData.stock || 0, // Ensure stock is not null
     };
 
     console.log(`[/api/products/[id]] Returning transformed product data for ID ${productId}.`);
     return NextResponse.json({ product }, { status: 200 });
   } catch (error) {
+    // This catch block is for unexpected errors in the try block itself (e.g., JSON parsing, etc.)
     console.error(`[/api/products/[id]] Unexpected error in API route for product ID ${id}:`, error instanceof Error ? error.message : JSON.stringify(error));
     const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
-    return NextResponse.json({ message: 'Failed to fetch product.', error: errorMessage }, { status: 500 });
+    return NextResponse.json({ message: 'Failed to process product request.', error: errorMessage }, { status: 500 });
   }
 }
