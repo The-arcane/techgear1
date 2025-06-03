@@ -1,12 +1,12 @@
 
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { PackagePlus, ListOrdered, Settings, Users, LayoutGrid, Loader2, ShieldAlert, LogIn } from "lucide-react";
-import { products, getAllOrders } from "@/lib/data"; 
+import { products, getAllOrders } from "@/lib/data";
 import type { Order } from "@/lib/types";
 import { supabase } from '@/lib/supabaseClient';
 import { useRouter } from 'next/navigation';
@@ -14,9 +14,10 @@ import type { User as AuthUserType } from '@supabase/supabase-js';
 
 export default function AdminPage() {
   const [authUser, setAuthUser] = useState<AuthUserType | null>(null);
-  const [isAdmin, setIsAdmin] = useState<boolean>(false); 
-  const [isLoading, setIsLoading] = useState(true); 
+  const [isAdmin, setIsAdmin] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
+  const initialAuthProcessed = useRef(false); // To track if onAuthStateChange has run at least once
 
   useEffect(() => {
     let isMounted = true;
@@ -27,73 +28,79 @@ export default function AdminPage() {
         console.log("AdminPage: onAuthStateChange - component unmounted, aborting. Preview Debug.");
         return;
       }
-      console.log("AdminPage: onAuthStateChange event:", event, "Session user:", session?.user?.id || "None", "Preview Debug.");
+      console.log("AdminPage: onAuthStateChange event:", event, "Session user:", session?.user?.id || "None", ". Preview Debug.");
 
       const currentUser = session?.user ?? null;
       setAuthUser(currentUser);
 
       if (currentUser) {
         console.log(`AdminPage: onAuthStateChange - User found: ${currentUser.id}. Checking admin status. Preview Debug.`);
-        const { data: adminData, error: adminError } = await supabase
-          .from('admins')
-          .select('id')
-          .eq('id', currentUser.id)
-          .maybeSingle();
+        try {
+          const { data: adminData, error: adminError } = await supabase
+            .from('admins')
+            .select('id')
+            .eq('id', currentUser.id)
+            .maybeSingle();
 
-        if (!isMounted) return;
+          if (!isMounted) return;
 
-        if (adminError) {
-          console.error("AdminPage: onAuthStateChange - Error checking 'admins' table:", adminError.message, "Preview Debug.");
+          if (adminError) {
+            console.error("AdminPage: onAuthStateChange - Error checking 'admins' table:", adminError.message, "Preview Debug.");
+            setIsAdmin(false);
+          } else {
+            const isAdminUser = !!adminData;
+            setIsAdmin(isAdminUser);
+            console.log(`AdminPage: onAuthStateChange - User ${currentUser.email} admin status: ${isAdminUser}. Preview Debug.`);
+          }
+        } catch (e) {
+          if (!isMounted) return;
+          console.error("AdminPage: onAuthStateChange - Exception checking 'admins' table:", e, "Preview Debug.");
           setIsAdmin(false);
-        } else {
-          const isAdminUser = !!adminData;
-          setIsAdmin(isAdminUser);
-          console.log(`AdminPage: onAuthStateChange - User ${currentUser.email} admin status: ${isAdminUser}. Preview Debug.`);
         }
       } else {
         console.log("AdminPage: onAuthStateChange - No user session. Preview Debug.");
         setIsAdmin(false);
       }
-      setIsLoading(false); 
+      
+      if (!initialAuthProcessed.current) {
+        initialAuthProcessed.current = true;
+      }
+      setIsLoading(false); // Set loading to false *after* auth state is processed
     });
 
-    // Initial check to see if user is already available
-    console.log("AdminPage: Performing initial supabase.auth.getUser(). Preview Debug.");
-    supabase.auth.getUser().then(async ({ data: { user: initialUser }, error: initialGetUserError }) => {
-        if (!isMounted) return;
-
-        if(initialGetUserError){
-            console.error("AdminPage: Initial getUser() error:", initialGetUserError.message, "Preview Debug.");
-        }
-
-        if (initialUser) {
+    // Initial check (onAuthStateChange also fires on load, but this can sometimes be quicker)
+    // However, we will rely on onAuthStateChange to set isLoading to false.
+    supabase.auth.getUser().then(async ({ data: { user: initialUser } }) => {
+        if (isMounted && !initialAuthProcessed.current && initialUser) { // Only act if onAuthStateChange hasn't processed yet
             console.log("AdminPage: Initial getUser() found user:", initialUser.id, "Preview Debug.");
-            // Only set authUser if onAuthStateChange hasn't fired yet or if it's different
-            // This helps avoid unnecessary re-renders if onAuthStateChange is quick
-            if (!authUser || authUser.id !== initialUser.id) {
-                 setAuthUser(initialUser);
-                 // Perform admin check here as well, as onAuthStateChange might not have fired with this user yet
-                 const { data: adminData, error: adminError } = await supabase
-                   .from('admins')
-                   .select('id')
-                   .eq('id', initialUser.id)
-                   .maybeSingle();
-
-                 if (isMounted) { // Check isMounted again before setting state
-                      if (adminError) {
-                         console.error("AdminPage: Initial getUser() - Error checking 'admins' table:", adminError.message, "Preview Debug.");
-                         setIsAdmin(false);
-                      } else {
-                         const isAdminUser = !!adminData;
-                         setIsAdmin(isAdminUser);
-                         console.log(`AdminPage: Initial getUser() - User ${initialUser.email} admin status: ${isAdminUser}. Preview Debug.`);
-                      }
+            setAuthUser(initialUser);
+            try {
+                const { data: adminData, error: adminError } = await supabase
+                    .from('admins')
+                    .select('id')
+                    .eq('id', initialUser.id)
+                    .maybeSingle();
+                if (isMounted) {
+                     if (adminError) {
+                        console.error("AdminPage: Initial getUser() - Error checking 'admins' table:", adminError.message, "Preview Debug.");
+                        setIsAdmin(false);
+                     } else {
+                        const isAdminUser = !!adminData;
+                        setIsAdmin(isAdminUser);
+                        console.log(`AdminPage: Initial getUser() - User ${initialUser.email} admin status: ${isAdminUser}. Preview Debug.`);
+                     }
+                }
+            } catch(e) {
+                 if (isMounted) {
+                    console.error("AdminPage: Initial getUser() - Exception checking 'admins' table:", e, "Preview Debug.");
+                    setIsAdmin(false);
                  }
             }
-        } else {
-             console.log("AdminPage: Initial getUser() found NO user. Preview Debug.");
+        } else if (isMounted && !initialAuthProcessed.current && !initialUser) {
+            console.log("AdminPage: Initial getUser() found NO user. Preview Debug.");
+             // onAuthStateChange will handle setting authUser to null and isAdmin to false
         }
-        // setIsLoading(false) is handled by onAuthStateChange to ensure it's the definitive signal
+        // Do NOT set isLoading to false here; let onAuthStateChange handle it to ensure it has run.
     });
 
 
@@ -102,7 +109,8 @@ export default function AdminPage() {
       console.log("AdminPage: useEffect cleanup - Unsubscribing auth listener. Preview Debug.");
       authListener?.subscription.unsubscribe();
     };
-  }, []); // Keep dependency array empty to run once on mount and rely on onAuthStateChange for updates.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const shouldRedirectToLogin = !isLoading && !authUser;
 
@@ -113,10 +121,11 @@ export default function AdminPage() {
     }
   }, [shouldRedirectToLogin, router]);
 
+
   const allMockOrders = getAllOrders();
   const totalProducts = products.length;
   const totalOrders = allMockOrders.length;
-  
+
   const orderStatusCounts = allMockOrders.reduce((acc, order) => {
     acc[order.status] = (acc[order.status] || 0) + 1;
     return acc;
@@ -139,8 +148,8 @@ export default function AdminPage() {
       </div>
     );
   }
-  
-  if (!isAdmin && authUser) { 
+
+  if (!isAdmin && authUser) {
     console.log(`AdminPage: Access Denied. User ${authUser.email} is NOT an admin. Preview Debug.`);
     return (
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-200px)] text-center">
@@ -156,7 +165,7 @@ export default function AdminPage() {
       </div>
     );
   }
-  
+
   if (!authUser) { // Should be caught by shouldRedirectToLogin, but as a safeguard
     console.log("AdminPage: Rendering, but authUser is null and not loading. Should be redirecting. Preview Debug.");
      return (
@@ -166,7 +175,7 @@ export default function AdminPage() {
       </div>
     );
   }
-  
+
   console.log(`AdminPage: Rendering admin panel for ${authUser.email}. isAdmin: ${isAdmin}. Preview Debug.`);
   return (
     <div className="space-y-8">
@@ -202,7 +211,7 @@ export default function AdminPage() {
              </Link>
           </CardContent>
         </Card>
-        
+
         <Card className="hover:shadow-lg transition-shadow">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -260,3 +269,5 @@ export default function AdminPage() {
     </div>
   );
 }
+
+    
