@@ -58,16 +58,16 @@ export function CheckoutForm() {
       return;
     }
 
-    console.log('Attempting to place order for user ID (auth.users.id / profiles.id):', user.id, 'User email:', user.email);
+    console.log('Attempting to place order for user ID (profiles.id / auth.users.id):', user.id, 'User email:', user.email);
 
     try {
       const orderToInsert: SupabaseOrderInsert = {
-        user_id: user.id, // This ID should exist in profiles table if trigger is set up
-        user_email: user.email || '', // Uses default from your schema if user.email is null/undefined
-        shipping_address: shippingAddress, // Uses default from your schema if this results in {}
+        user_id: user.id, 
+        user_email: user.email || '', 
+        shipping_address: shippingAddress,
         total_amount: getCartTotal(),
-        status: 'Pending', // Default is 'pending' in schema
-        payment_mode: 'COD', // Default is 'COD' in schema
+        status: 'Pending',
+        payment_mode: 'COD',
       };
       
       console.log('Order object being inserted:', JSON.stringify(orderToInsert, null, 2));
@@ -80,7 +80,13 @@ export function CheckoutForm() {
 
       if (orderError || !newOrderData) {
         console.error('Error creating order. orderError object:', JSON.stringify(orderError, null, 2), 'newOrderData:', newOrderData);
-        toast({ title: "Order Placement Failed", description: `Error: ${orderError?.message || "Could not save order."} Ensure a profile exists for the user and all required fields are correct.`, variant: "destructive", duration: 10000 });
+        let description = orderError?.message || "Could not save the order.";
+        if (orderError?.message && orderError.message.includes("orders_user_id_fkey")) {
+          description = "Order placement failed: The user's profile was not found in the 'profiles' table. This usually means the database trigger to create a profile automatically when a user signs up is missing, not working, or the current user was created before the trigger was active. Please ensure a profile record exists for your user ID in the 'profiles' table, and check the database trigger setup.";
+        } else if (!orderError?.message) {
+            description += " Ensure 'shipping_address' and 'user_email' columns exist and are correctly typed in your 'orders' table, and all required fields are correct.";
+        }
+        toast({ title: "Order Placement Failed", description, variant: "destructive", duration: 15000 });
         setIsLoading(false);
         return;
       }
@@ -95,8 +101,8 @@ export function CheckoutForm() {
         const productIdInt = parseInt(item.productId, 10);
         if (isNaN(productIdInt)) {
             console.error(`Invalid product ID for item ${item.name}: ${item.productId}. Skipping item.`);
-            stockUpdateErrorOccurred = true;
-            continue;
+            stockUpdateErrorOccurred = true; // Mark that an issue occurred
+            continue; // Skip this item
         }
 
         orderItemsToInsert.push({
@@ -106,6 +112,7 @@ export function CheckoutForm() {
           price_at_time: item.price,
         });
 
+        // Update stock
         const { data: productData, error: productFetchError } = await supabase
           .from('products')
           .select('stock')
@@ -114,14 +121,18 @@ export function CheckoutForm() {
 
         if (productFetchError || !productData) {
           console.error(`Error fetching stock for product ID ${productIdInt}:`, JSON.stringify(productFetchError, null, 2));
-          stockUpdateErrorOccurred = true;
-          continue;
+          stockUpdateErrorOccurred = true; // Mark that an issue occurred
+          // Decide if you want to continue processing other items or rollback
+          continue; // For now, skip stock update for this item and continue
         }
 
         const currentStock = productData.stock || 0;
         const newStock = currentStock - item.quantity;
 
         if (newStock < 0) {
+          // This case should ideally be prevented by disabling add-to-cart for out-of-stock items
+          // or by checking available stock before allowing checkout.
+          // For now, log a warning and potentially clamp stock to 0 if business logic allows.
           console.warn(`Product ID ${productIdInt} stock (${currentStock}) is less than quantity ordered (${item.quantity}). Clamping stock to 0.`);
           const { error: stockClampError } = await supabase
             .from('products')
@@ -131,6 +142,7 @@ export function CheckoutForm() {
             console.error(`Error clamping stock for product ID ${productIdInt}:`, JSON.stringify(stockClampError, null, 2));
             stockUpdateErrorOccurred = true;
           }
+          // Potentially continue to next item or handle as a critical error
           continue; 
         }
         
@@ -141,10 +153,11 @@ export function CheckoutForm() {
 
         if (stockUpdateDbError) {
           console.error(`Error updating stock for product ID ${productIdInt}:`, JSON.stringify(stockUpdateDbError, null, 2));
-          stockUpdateErrorOccurred = true;
+          stockUpdateErrorOccurred = true; // Mark that an issue occurred
         }
       }
 
+      // Insert all valid order items
       if (orderItemsToInsert.length > 0) {
         const { error: orderItemsError } = await supabase
             .from('order_items')
@@ -153,14 +166,15 @@ export function CheckoutForm() {
         if (orderItemsError) {
             console.error('Error creating order items:', JSON.stringify(orderItemsError, null, 2));
             toast({ title: "Order Items Failed", description: (orderItemsError as any)?.message || "Could not save order items.", variant: "destructive" });
-            await supabase.from('orders').delete().eq('id', newOrderId); // Attempt rollback
+            // Attempt to delete the order if items failed
+            await supabase.from('orders').delete().eq('id', newOrderId);
             setIsLoading(false);
             return;
         }
-      } else if (cartItems.length > 0) { 
+      } else if (cartItems.length > 0) { // If there were cart items but none were valid for order_items
           console.error('No valid order items could be prepared. Rolling back order.');
           toast({ title: "Order Failed", description: "No items could be processed for the order.", variant: "destructive" });
-          await supabase.from('orders').delete().eq('id', newOrderId); // Attempt rollback
+          await supabase.from('orders').delete().eq('id', newOrderId);
           setIsLoading(false);
           return;
       }
@@ -245,6 +259,3 @@ export function CheckoutForm() {
     </form>
   );
 }
-
-
-    
