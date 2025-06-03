@@ -5,36 +5,43 @@ import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { PackagePlus, ListOrdered, Settings, Users, LayoutGrid, Loader2, ShieldAlert, LogIn } from "lucide-react";
-import { getAllOrders } from "@/lib/data";
-import type { Order } from "@/lib/types";
+import { PackagePlus, ListOrdered, Settings, Users, LayoutGrid, Loader2, ShieldAlert, LogIn, ShoppingBasket, Clock, CheckCircle } from "lucide-react";
+import type { OrderStatus } from "@/lib/types";
 import { supabase } from '@/lib/supabaseClient';
 import { useRouter } from 'next/navigation';
 import type { User as AuthUserType } from '@supabase/supabase-js';
 
+interface StoreStats {
+  totalProducts: number;
+  totalOrders: number;
+  pendingOrders: number;
+  completedOrders: number;
+}
+
 export default function AdminPage() {
   const [authUser, setAuthUser] = useState<AuthUserType | null>(null);
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
-  const [isLoading, setIsLoading] = useState(true); // Start true
+  const [isLoadingAuth, setIsLoadingAuth] = useState(true);
+  const [isLoadingStats, setIsLoadingStats] = useState(false);
+  const [storeStats, setStoreStats] = useState<StoreStats>({
+    totalProducts: 0,
+    totalOrders: 0,
+    pendingOrders: 0,
+    completedOrders: 0,
+  });
   const router = useRouter();
 
   useEffect(() => {
     let isMounted = true;
-    console.log("AdminPage: useEffect mounted. Setting isLoading to true. Preview Debug.");
-    setIsLoading(true); // Explicitly set loading true when effect runs
+    setIsLoadingAuth(true);
 
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (!isMounted) {
-        console.log("AdminPage: onAuthStateChange - component unmounted, aborting. Preview Debug.");
-        return;
-      }
-      console.log("AdminPage: onAuthStateChange event:", event, "Session user:", session?.user?.id || "None", ". Preview Debug.");
+      if (!isMounted) return;
       
       const currentUser = session?.user ?? null;
       setAuthUser(currentUser);
 
       if (currentUser) {
-        console.log(`AdminPage: onAuthStateChange - User found: ${currentUser.id}. Checking admin status. Preview Debug.`);
         try {
           const { data: adminData, error: adminError } = await supabase
             .from('admins')
@@ -45,75 +52,132 @@ export default function AdminPage() {
           if (!isMounted) return;
 
           if (adminError) {
-            console.error("AdminPage: onAuthStateChange - Error checking 'admins' table:", adminError.message, "Preview Debug.");
             setIsAdmin(false);
           } else {
             const isAdminUser = !!adminData;
             setIsAdmin(isAdminUser);
-            console.log(`AdminPage: onAuthStateChange - User ${currentUser.email} admin status: ${isAdminUser}. adminData:`, JSON.stringify(adminData) , "Preview Debug.");
+            if (isAdminUser) {
+              fetchStoreStats(); // Fetch stats if admin
+            }
           }
         } catch (e: any) {
           if (!isMounted) return;
-          console.error("AdminPage: onAuthStateChange - Exception checking 'admins' table:", e.message, "Preview Debug.");
           setIsAdmin(false);
         }
       } else {
-        console.log("AdminPage: onAuthStateChange - No user session. Setting isAdmin to false. Preview Debug.");
         setIsAdmin(false);
       }
       
-      if (isMounted) {
-        setIsLoading(false); 
-        console.log("AdminPage: onAuthStateChange - setIsLoading(false). Preview Debug.");
-      }
+      if (isMounted) setIsLoadingAuth(false);
     });
+
+    // Check initial session
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+        if (!isMounted) return;
+        const currentUser = session?.user ?? null;
+        setAuthUser(currentUser);
+        if (currentUser) {
+            // check admin status for initial session
+            try {
+                const { data: adminData, error: adminError } = await supabase
+                    .from('admins')
+                    .select('id')
+                    .eq('id', currentUser.id)
+                    .maybeSingle();
+                if (!isMounted) return;
+                if (adminError) setIsAdmin(false);
+                else {
+                    const isAdminUser = !!adminData;
+                    setIsAdmin(isAdminUser);
+                    if (isAdminUser) fetchStoreStats();
+                }
+            } catch (e) { if (!isMounted) return; setIsAdmin(false); }
+        }
+        if (isMounted) setIsLoadingAuth(false);
+    }).catch(() => {
+        if(isMounted) setIsLoadingAuth(false);
+    });
+
 
     return () => {
       isMounted = false;
-      console.log("AdminPage: useEffect cleanup - Unsubscribing auth listener. Preview Debug.");
       authListener?.subscription.unsubscribe();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Empty dependency array: runs on mount/unmount. Router is stable.
+  }, []);
+
+  const fetchStoreStats = async () => {
+    if (!isAdmin) return; // Should be redundant due to call site, but good check
+    setIsLoadingStats(true);
+    try {
+      // Fetch total products
+      const { count: productsCount, error: productsError } = await supabase
+        .from('products')
+        .select('*', { count: 'exact', head: true });
+      if (productsError) throw productsError;
+
+      // Fetch total orders
+      const { count: ordersCount, error: ordersError } = await supabase
+        .from('orders')
+        .select('*', { count: 'exact', head: true });
+      if (ordersError) throw ordersError;
+      
+      // Fetch pending orders
+      const { count: pendingOrdersCount, error: pendingError } = await supabase
+        .from('orders')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'Pending' as OrderStatus);
+      if (pendingError) throw pendingError;
+
+      // Fetch completed orders
+      const { count: completedOrdersCount, error: completedError } = await supabase
+        .from('orders')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'Delivered' as OrderStatus);
+      if (completedError) throw completedError;
+      
+      setStoreStats({
+        totalProducts: productsCount || 0,
+        totalOrders: ordersCount || 0,
+        pendingOrders: pendingOrdersCount || 0,
+        completedOrders: completedOrdersCount || 0,
+      });
+
+    } catch (error: any) {
+      console.error("Error fetching store stats:", error.message);
+      // Optionally set an error state to display to the user
+    } finally {
+      setIsLoadingStats(false);
+    }
+  };
+
 
   useEffect(() => {
-    if (!isLoading && !authUser) {
-      console.log("AdminPage: Redirection effect. isLoading:", isLoading, "authUser:", !!authUser, "Redirecting to /admin/login. Preview Debug.");
+    if (!isLoadingAuth && !authUser) {
       router.push('/admin/login');
     }
-  }, [isLoading, authUser, router]);
+  }, [isLoadingAuth, authUser, router]);
 
 
-  const allMockOrders = getAllOrders(); 
-  const totalProducts = 0; 
-  const totalOrders = allMockOrders.length;
-
-  const orderStatusCounts = allMockOrders.reduce((acc, order) => {
-    acc[order.status] = (acc[order.status] || 0) + 1;
-    return acc;
-  }, {} as Record<Order['status'], number>);
-
-  if (isLoading) {
+  if (isLoadingAuth) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-200px)]">
         <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-        <p className="text-muted-foreground">Verifying admin access (Preview Debug)...</p>
+        <p className="text-muted-foreground">Verifying admin access...</p>
       </div>
     );
   }
 
   if (!authUser) {
-     console.log("AdminPage: Render - No authUser after loading. Should be redirecting by redirection effect. Preview Debug.");
      return (
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-200px)]">
         <LogIn className="h-12 w-12 text-primary mb-4" />
-        <p className="text-muted-foreground">Redirecting to admin login (Preview Debug)...</p>
+        <p className="text-muted-foreground">Redirecting to admin login...</p>
       </div>
     );
   }
   
   if (authUser && !isAdmin) {
-    console.log(`AdminPage: Render - Access Denied. User ${authUser.email} is authenticated but NOT an admin. isAdmin: ${isAdmin}. Preview Debug.`);
     return (
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-200px)] text-center">
         <ShieldAlert className="h-16 w-16 text-destructive mb-4" />
@@ -130,7 +194,6 @@ export default function AdminPage() {
   }
   
   if (authUser && isAdmin) {
-    console.log(`AdminPage: Render - Admin panel for ${authUser.email}. isAdmin: ${isAdmin}. Preview Debug.`);
     return (
       <div className="space-y-8">
         <h1 className="text-3xl font-bold font-headline">Admin Panel</h1>
@@ -172,11 +235,11 @@ export default function AdminPage() {
                 <Users className="h-6 w-6 text-primary" />
                 User Management
               </CardTitle>
-              <CardDescription>View and manage user accounts.</CardDescription>
+              <CardDescription>View and manage user accounts. (Coming Soon)</CardDescription>
             </CardHeader>
             <CardContent>
               <Link href="/admin/users">
-                <Button className="w-full">Manage Users</Button>
+                <Button className="w-full" disabled>Manage Users</Button>
               </Link>
             </CardContent>
           </Card>
@@ -187,11 +250,11 @@ export default function AdminPage() {
                 <LayoutGrid className="h-6 w-6 text-primary" />
               Category Management
               </CardTitle>
-              <CardDescription>Add, edit, or delete categories.</CardDescription>
+              <CardDescription>Add, edit, or delete categories. (Coming Soon)</CardDescription>
             </CardHeader>
             <CardContent>
               <Link href="/admin/categories">
-                <Button className="w-full">Manage Categories</Button>
+                <Button className="w-full" disabled>Manage Categories</Button>
               </Link>
             </CardContent>
           </Card>
@@ -202,33 +265,60 @@ export default function AdminPage() {
                 <Settings className="h-6 w-6 text-primary" />
                 Store Settings
               </CardTitle>
-              <CardDescription>Configure store preferences.</CardDescription>
+              <CardDescription>Configure store preferences. (Coming Soon)</CardDescription>
             </CardHeader>
             <CardContent>
               <Link href="/admin/settings">
-                <Button className="w-full">Configure Settings</Button>
+                <Button className="w-full" disabled>Configure Settings</Button>
               </Link>
             </CardContent>
           </Card>
         </div>
-        <div className="mt-8 p-6 bg-card rounded-lg shadow">
-          <h2 className="text-xl font-semibold mb-4 font-headline">Store Overview</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-              <div><p className="text-3xl font-bold">{totalProducts}</p><p className="text-sm text-muted-foreground">Total Products</p></div>
-              <div><p className="text-3xl font-bold">{totalOrders}</p><p className="text-sm text-muted-foreground">Total Orders</p></div>
-              <div><p className="text-3xl font-bold">{orderStatusCounts['Pending'] || 0}</p><p className="text-sm text-muted-foreground">Pending Orders</p></div>
-              <div><p className="text-3xl font-bold">{orderStatusCounts['Delivered'] || 0}</p><p className="text-sm text-muted-foreground">Completed Orders</p></div>
-          </div>
-        </div>
+        
+        <Card className="shadow-lg">
+          <CardHeader>
+             <CardTitle className="text-xl font-semibold font-headline">Store Overview</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isLoadingStats ? (
+              <div className="flex justify-center items-center py-8">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <p className="ml-3 text-muted-foreground">Loading stats...</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
+                <div className="p-4 bg-background rounded-lg shadow-sm">
+                  <ShoppingBasket className="mx-auto h-8 w-8 text-primary mb-2" />
+                  <p className="text-3xl font-bold">{storeStats.totalProducts}</p>
+                  <p className="text-sm text-muted-foreground">Total Products</p>
+                </div>
+                <div className="p-4 bg-background rounded-lg shadow-sm">
+                  <ListOrdered className="mx-auto h-8 w-8 text-accent mb-2" />
+                  <p className="text-3xl font-bold">{storeStats.totalOrders}</p>
+                  <p className="text-sm text-muted-foreground">Total Orders</p>
+                </div>
+                <div className="p-4 bg-background rounded-lg shadow-sm">
+                  <Clock className="mx-auto h-8 w-8 text-yellow-500 mb-2" />
+                  <p className="text-3xl font-bold">{storeStats.pendingOrders}</p>
+                  <p className="text-sm text-muted-foreground">Pending Orders</p>
+                </div>
+                <div className="p-4 bg-background rounded-lg shadow-sm">
+                  <CheckCircle className="mx-auto h-8 w-8 text-green-500 mb-2" />
+                  <p className="text-3xl font-bold">{storeStats.completedOrders}</p>
+                  <p className="text-sm text-muted-foreground">Completed Orders</p>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
-  console.log("AdminPage: Render - Reached fallback render (should be rare). isLoading:", isLoading, "authUser:", !!authUser, "isAdmin:", isAdmin, "Preview Debug.");
   return (
     <div className="flex flex-col items-center justify-center min-h-[calc(100vh-200px)]">
       <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-      <p className="text-muted-foreground">Verifying session state (Fallback)...</p>
+      <p className="text-muted-foreground">Verifying session state...</p>
     </div>
   );
 }
