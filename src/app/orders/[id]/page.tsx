@@ -1,42 +1,139 @@
 
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle, CardSubTitle } from '@/components/ui/card'; // CardSubTitle might not exist, adjust if needed
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
-import { getOrderById } from '@/lib/data';
-import type { Order } from '@/lib/types';
-import { ArrowLeft, Package, MapPin, CreditCard, ShoppingCart, Hash } from 'lucide-react';
+import type { Order, OrderStatus, CartItem, SupabaseOrderFetched, SupabaseOrderItemWithProduct, ShippingAddress } from '@/lib/types';
+import { ArrowLeft, Package, MapPin, CreditCard, ShoppingCart, AlertTriangle } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import type { Metadata } from 'next';
+import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
+import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
 
 type UserOrderDetailPageProps = {
-  params: { id: string };
+  params: { id: string }; // The order ID from the URL, which is the DB integer ID as string
 };
 
-export async function generateMetadata({ params }: UserOrderDetailPageProps): Promise<Metadata> {
-  const order = getOrderById(params.id);
+async function getOrderDetailsFromSupabase(orderIdNum: number, userId: string): Promise<Order | null> {
+  const supabase = createServerComponentClient({ cookies });
+
+  const { data: orderData, error: orderError } = await supabase
+    .from('orders')
+    .select<string, SupabaseOrderFetched>(`
+      id,
+      user_id,
+      status,
+      payment_mode,
+      total_amount,
+      created_at,
+      shipping_address,
+      user_email
+    `)
+    .eq('id', orderIdNum)
+    .eq('user_id', userId) // Ensure the user owns this order
+    .single();
+
+  if (orderError || !orderData) {
+    console.error(`Error fetching order ${orderIdNum} for user ${userId}:`, orderError);
+    return null;
+  }
+
+  const { data: orderItemsData, error: itemsError } = await supabase
+    .from('order_items')
+    .select<string, SupabaseOrderItemWithProduct>(`
+      quantity,
+      price_at_time,
+      products (id, name, image_url, stock)
+    `)
+    .eq('order_id', orderData.id);
+
+  if (itemsError) {
+    console.error(`Error fetching items for order ${orderData.id}:`, itemsError);
+    // Decide if order should be returned with empty items or null
+    return null; 
+  }
+
+  const items: CartItem[] = orderItemsData?.map(item => ({
+    productId: item.products?.id?.toString() || 'unknown-product',
+    name: item.products?.name || 'Product Not Available',
+    price: item.price_at_time,
+    quantity: item.quantity,
+    image: item.products?.image_url || 'https://placehold.co/100x100.png',
+    stock: item.products?.stock || 0,
+  })) || [];
+
   return {
-    title: `Order Details ${order ? `#${order.id}` : ''} | TechGear`,
-    description: `View details for your TechGear order ${order ? `#${order.id}` : ''}.`,
+    id: orderData.id.toString(),
+    db_id: orderData.id,
+    userId: orderData.user_id || '',
+    userEmail: orderData.user_email,
+    items,
+    totalAmount: orderData.total_amount,
+    status: orderData.status as OrderStatus || 'Pending',
+    orderDate: orderData.created_at,
+    shippingAddress: orderData.shipping_address as ShippingAddress, // Assuming direct compatibility
+    paymentMethod: (orderData.payment_mode as 'COD') || 'COD',
   };
 }
 
-// This is a placeholder for authentication. In a real app, you'd verify
-// that the logged-in user owns this order or is an admin.
-const canViewOrder = (order: Order | undefined, currentUserId: string = "user1") => {
-    // For now, any authenticated user can see any order for demo.
-    // Replace "user1" with actual logged-in user ID logic.
-    return !!order; // && (order.userId === currentUserId || isAdmin);
-};
+
+export async function generateMetadata({ params }: UserOrderDetailPageProps): Promise<Metadata> {
+  const supabase = createServerComponentClient({ cookies });
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  let orderTitleId: string | null = null;
+  if (user) {
+    const orderIdNum = parseInt(params.id, 10);
+    if (!isNaN(orderIdNum)) {
+       const { data: orderData } = await supabase
+        .from('orders')
+        .select('id')
+        .eq('id', orderIdNum)
+        .eq('user_id', user.id)
+        .single();
+      if (orderData) {
+        orderTitleId = orderData.id.toString();
+      }
+    }
+  }
+  
+  return {
+    title: `Order Details ${orderTitleId ? `#${orderTitleId}` : ''} | TechGear`,
+    description: `View details for your TechGear order ${orderTitleId ? `#${orderTitleId}` : ''}.`,
+  };
+}
 
 
-export default function UserOrderDetailPage({ params }: UserOrderDetailPageProps) {
-  const { id: orderId } = params;
-  const order = getOrderById(orderId);
+export default async function UserOrderDetailPage({ params }: UserOrderDetailPageProps) {
+  const supabase = createServerComponentClient({ cookies });
+  const { data: { user } } = await supabase.auth.getUser();
 
-  if (!order || !canViewOrder(order)) {
+  if (!user) {
+    redirect('/login?message=Please login to view your order details.');
+  }
+
+  const orderIdNum = parseInt(params.id, 10);
+
+  if (isNaN(orderIdNum)) {
     return (
       <div className="text-center py-12">
+        <AlertTriangle className="mx-auto h-12 w-12 text-destructive mb-4" />
+        <h1 className="text-3xl font-bold text-destructive mb-4">Invalid Order ID</h1>
+        <p className="text-muted-foreground">The order ID provided is not valid.</p>
+        <Link href="/orders" className="mt-6 inline-block">
+          <Button variant="outline"><ArrowLeft className="mr-2 h-4 w-4" /> Back to My Orders</Button>
+        </Link>
+      </div>
+    );
+  }
+
+  const order = await getOrderDetailsFromSupabase(orderIdNum, user.id);
+
+  if (!order) {
+    return (
+      <div className="text-center py-12">
+        <AlertTriangle className="mx-auto h-12 w-12 text-destructive mb-4" />
         <h1 className="text-3xl font-bold text-destructive mb-4">Order Not Found</h1>
         <p className="text-muted-foreground">
           Sorry, we couldn't find the order you're looking for, or you don't have permission to view it.
@@ -64,7 +161,7 @@ export default function UserOrderDetailPage({ params }: UserOrderDetailPageProps
         <CardHeader className="bg-muted/30 p-6">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
             <div>
-              <CardTitle className="text-3xl font-headline">Order #{order.id}</CardTitle>
+              <CardTitle className="text-3xl font-headline">Order #{order.db_id}</CardTitle>
               <CardDescription className="text-sm text-muted-foreground">
                 Placed on: {new Date(order.orderDate).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
               </CardDescription>
@@ -85,21 +182,31 @@ export default function UserOrderDetailPage({ params }: UserOrderDetailPageProps
         <CardContent className="p-6 space-y-6">
           <section>
             <h2 className="text-xl font-semibold mb-3 flex items-center"><ShoppingCart className="mr-2 h-5 w-5 text-primary"/>Order Items</h2>
-            <ul className="space-y-4">
-              {order.items.map(item => (
-                <li key={item.productId} className="flex items-start space-x-4 p-4 border rounded-md bg-background hover:bg-muted/50 transition-colors">
-                  <div className="relative w-20 h-20 rounded-md overflow-hidden border">
-                    <Image src={item.image} alt={item.name} layout="fill" objectFit="cover" data-ai-hint="product" />
-                  </div>
-                  <div className="flex-grow">
-                    <Link href={`/products/${item.productId}`} className="font-medium hover:text-primary transition-colors">{item.name}</Link>
-                    <p className="text-sm text-muted-foreground">Quantity: {item.quantity}</p>
-                    <p className="text-sm text-muted-foreground">Price: ₹{item.price.toFixed(2)}</p>
-                  </div>
-                  <p className="text-md font-semibold">₹{(item.price * item.quantity).toFixed(2)}</p>
-                </li>
-              ))}
-            </ul>
+            {order.items.length > 0 ? (
+              <ul className="space-y-4">
+                {order.items.map(item => (
+                  <li key={item.productId} className="flex items-start space-x-4 p-4 border rounded-md bg-background hover:bg-muted/50 transition-colors">
+                    <div className="relative w-20 h-20 rounded-md overflow-hidden border">
+                      <Image 
+                        src={item.image || 'https://placehold.co/100x100.png'} 
+                        alt={item.name} 
+                        layout="fill" 
+                        objectFit="cover" 
+                        data-ai-hint="product item"
+                      />
+                    </div>
+                    <div className="flex-grow">
+                      <Link href={`/products/${item.productId}`} className="font-medium hover:text-primary transition-colors">{item.name}</Link>
+                      <p className="text-sm text-muted-foreground">Quantity: {item.quantity}</p>
+                      <p className="text-sm text-muted-foreground">Price: ₹{item.price.toFixed(2)}</p>
+                    </div>
+                    <p className="text-md font-semibold">₹{(item.price * item.quantity).toFixed(2)}</p>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-muted-foreground">No items found for this order.</p>
+            )}
           </section>
 
           <Separator />
@@ -120,7 +227,6 @@ export default function UserOrderDetailPage({ params }: UserOrderDetailPageProps
               <div className="text-muted-foreground space-y-1 p-4 border rounded-md bg-background">
                 <p><strong>Payment Method:</strong> {order.paymentMethod}</p>
                 <p><strong>Order Total:</strong> <span className="font-bold text-lg text-foreground">₹{order.totalAmount.toFixed(2)}</span></p>
-                 {/* Add more payment details if available, like transaction ID for non-COD */}
               </div>
             </section>
           </div>

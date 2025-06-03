@@ -38,16 +38,16 @@ export interface ShippingAddress {
 export type OrderStatus = 'Pending' | 'Processing' | 'Shipped' | 'Delivered' | 'Cancelled';
 
 export interface Order {
-  id: string; 
-  userId: string;
-  userEmail?: string;
+  id: string; // App-level ID, string representation of DB integer ID
+  userId: string; // Supabase auth.users.id (UUID)
+  userEmail: string; // User's email
   items: CartItem[];
   totalAmount: number;
   status: OrderStatus;
-  orderDate: string;
+  orderDate: string; // ISO string
   shippingAddress: ShippingAddress;
-  paymentMethod: 'COD'; // This type is used by mock data, can be payment_mode if needed there too
-  db_id?: number; 
+  paymentMethod: 'COD'; // Corresponds to payment_mode in DB
+  db_id?: number; // Actual integer ID from DB orders table
 }
 
 export interface User {
@@ -77,34 +77,29 @@ export interface SupabaseProduct {
 }
 
 export interface SupabaseOrderInsert {
-  user_id?: string | null; // uuid
-  // user_email: string; // This column is NOT in your provided `orders` schema. Retained for now, will error if column missing.
+  user_id?: string | null; // uuid (references profiles.id which is auth.users.id)
   status?: string; // text, default 'pending'
   payment_mode?: string; // text, default 'COD'
   total_amount: number; // numeric
-  // shipping_address: ShippingAddress; // This column is NOT in your provided `orders` schema. Retained as JSONB assumption, will error if column missing.
-  // The following are columns that I expect should be in your `orders` table
-  // for a typical e-commerce app, especially with COD.
-  // If they are not, the insert will fail, highlighting the schema mismatch.
-  user_email?: string; // Assuming you'll add this for record keeping
-  shipping_address?: ShippingAddress; // Assuming you'll add this (as JSONB) for shipping
+  user_email: string; // text NOT NULL
+  shipping_address: ShippingAddress; // jsonb NOT NULL
 }
 
 export interface SupabaseOrderFetched {
-    id: number; // integer
-    user_id?: string | null; // uuid
-    user_email?: string | null; // text - Assuming you might add this to your table
-    status?: string | null; // text
-    payment_mode?: string | null; // text
+    id: number; // integer (Primary Key from DB)
+    user_id: string | null; // uuid (references profiles.id)
+    status: string | null; // text
+    payment_mode: string | null; // text
     total_amount: number; // numeric
-    shipping_address?: ShippingAddress; // JSONB - Assuming you might add this
-    created_at?: string; // timestamptz
+    created_at: string; // timestamptz
+    shipping_address: ShippingAddress; // jsonb
+    user_email: string; // text
 }
 
 
 export interface SupabaseOrderItemInsert {
-  order_id?: number | null; // integer
-  product_id?: number | null; // integer
+  order_id: number; // integer (references orders.id)
+  product_id: number; // integer (references products.id)
   quantity: number; // integer
   price_at_time: number; // numeric
 }
@@ -119,4 +114,14 @@ export interface SupabaseAdmin {
   can_manage_categories?: boolean | null; // boolean, default true
   can_manage_store_settings?: boolean | null; // boolean, default true
   created_at?: string; // timestamptz, default now()
+}
+
+export interface SupabaseOrderItemWithProduct extends SupabaseOrderItemInsert {
+  products: {
+    id: number;
+    name: string;
+    image_url: string | null;
+    stock: number | null;
+    // category: string | null; // if needed for categorySlug
+  } | null; // Product could be null if deleted
 }

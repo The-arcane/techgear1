@@ -39,9 +39,10 @@ export const categories: Category[] = [
   },
 ];
 
+// Products are still mock, but orders will come from Supabase
 export let products: Product[] = [
   {
-    id: 'logitech-mx-master-3',
+    id: '1', // Assuming integer IDs now for consistency with DB for new products
     name: 'Logitech MX Master 3 Mouse',
     description: 'Ergonomic wireless mouse with ultrafast scrolling and customizable buttons for productivity.',
     categorySlug: 'mice',
@@ -51,7 +52,7 @@ export let products: Product[] = [
     stock: 25,
   },
   {
-    id: 'apple-magic-keyboard',
+    id: '2',
     name: 'Apple Magic Keyboard',
     description: 'Sleek and comfortable wireless keyboard with a stable scissor mechanism.',
     categorySlug: 'keyboards',
@@ -61,7 +62,7 @@ export let products: Product[] = [
     stock: 15,
   },
   {
-    id: 'anker-usbc-charger',
+    id: '3',
     name: 'Anker USB-C Charger',
     description: 'Compact and powerful USB-C fast charger for phones, tablets, and laptops.',
     categorySlug: 'mobile-chargers',
@@ -71,7 +72,7 @@ export let products: Product[] = [
     stock: 40,
   },
   {
-    id: 'samsung-galaxy-buds-pro',
+    id: '4',
     name: 'Samsung Galaxy Buds Pro',
     description: 'True wireless earbuds with intelligent Active Noise Cancellation and immersive sound.',
     categorySlug: 'earphones',
@@ -81,17 +82,17 @@ export let products: Product[] = [
     stock: 30,
   },
   {
-    id: 'razer-blackwidow-keyboard',
+    id: '5',
     name: 'Razer BlackWidow Keyboard',
     description: 'Iconic mechanical gaming keyboard known for its precision and tactile feedback.',
     categorySlug: 'keyboards',
     price: 8499,
-    images: ['https://placehold.co/600x400.png'], // Keeping a placeholder for this specific product for now
+    images: ['https://placehold.co/600x400.png'],
     specifications: { Switches: "Razer Green Mechanical", Backlight: "Razer Chroma RGB", Durability: "80 million keystrokes" },
     stock: 20,
   },
   {
-    id: 'dell-laptop-sleeve',
+    id: '6',
     name: 'Dell Inspiron Laptop Sleeve',
     description: 'Protective and stylish sleeve for Dell Inspiron laptops up to 15 inches.',
     categorySlug: 'accessories',
@@ -101,88 +102,51 @@ export let products: Product[] = [
     stock: 50,
   },
   {
-    id: 'jabra-elite-75t',
+    id: '7',
     name: 'Jabra Elite 75t Earphones',
     description: 'Compact true wireless earbuds with great sound, secure fit, and long battery life.',
     categorySlug: 'earphones',
     price: 7999,
-    images: ['https://placehold.co/600x400.png'], // Keeping a placeholder for this specific product for now
+    images: ['https://placehold.co/600x400.png'],
     specifications: { Type: "In-ear", Battery: "7.5 hours (buds)", IPRating: "IP55" },
     stock: 28,
   },
   {
-    id: 'amazon-hdmi-cable',
+    id: '8',
     name: 'Amazon Basics HDMI Cable',
     description: 'High-speed HDMI cable for connecting your devices to displays, supporting 4K video.',
     categorySlug: 'accessories',
     price: 799,
-    images: ['https://placehold.co/600x400.png'], // Keeping a placeholder for this specific product for now
+    images: ['https://placehold.co/600x400.png'],
     specifications: { Length: "6 Feet", Standard: "HDMI 2.0", Resolution: "4K @ 60Hz" },
     stock: 60,
   },
   {
-    id: 'sony-wireless-mouse',
+    id: '9',
     name: 'Sony Wireless Mouse',
     description: 'Reliable and compact wireless mouse, perfect for everyday use and travel.',
     categorySlug: 'mice',
     price: 1499,
-    images: ['https://placehold.co/600x400.png'], // Keeping a placeholder for this specific product for now
+    images: ['https://placehold.co/600x400.png'],
     specifications: { Connectivity: "2.4GHz Wireless", BatteryLife: "Up to 12 months", Buttons: "3" },
     stock: 35,
   },
   {
-    id: 'belkin-fast-charging-cable',
+    id: '10',
     name: 'Belkin Fast Charging Cable',
     description: 'Durable USB-C to Lightning cable for fast charging Apple devices.',
     categorySlug: 'mobile-chargers',
     price: 899,
-    images: ['https://placehold.co/600x400.png'], // Keeping a placeholder for this specific product for now
+    images: ['https://placehold.co/600x400.png'],
     specifications: { Type: "USB-C to Lightning", Length: "1 meter", Certification: "MFi Certified" },
     stock: 45,
   }
 ];
 
-// Let's make orders mutable for the mock simulation
-export let orders: Order[] = [
-  { 
-    id: "TG-123456", userId: "user1", userEmail: "customer1@example.com",
-    items: [{ productId: "logitech-mx-master-3", name: "Logitech MX Master 3 Mouse", price: 7999, quantity: 1, image: "https://i.postimg.cc/YSHXFDyX/Logitech-MX-Master-3-S-1200x1200.jpg", stock: 10 }], 
-    totalAmount: 7999, status: "Delivered", orderDate: new Date(Date.now() - 1000*60*60*24*5).toISOString(),
-    shippingAddress: { fullName: "John Doe", address: "123 Main St", city: "Anytown", postalCode: "12345", country: "India"},
-    paymentMethod: "COD"
-  },
-  { 
-    id: "TG-789012", userId: "user1", userEmail: "customer1@example.com",
-    items: [
-      { productId: "apple-magic-keyboard", name: "Apple Magic Keyboard", price: 9500, quantity: 1, image: "https://i.postimg.cc/1z7JdR3d/magic-keyboard-with-touch-id-and-numeric-keypad-for-mac-models-with-apple-silicon-white-keys-MXK73.jpg", stock: 10 },
-      { productId: "anker-usbc-charger", name: "Anker USB-C Charger", price: 1299, quantity: 1, image: "https://i.postimg.cc/9MVFv2gG/61-R3k6-I3uv-L-AC-UF1000-1000-QL80-Dp-Weblab.jpg", stock: 10 }
-    ], 
-    totalAmount: 10799, status: "Shipped", orderDate: new Date(Date.now() - 1000*60*60*24*2).toISOString(),
-    shippingAddress: { fullName: "John Doe", address: "123 Main St", city: "Anytown", postalCode: "12345", country: "India"},
-    paymentMethod: "COD"
-  },
-  { 
-    id: "TG-345678", userId: "user2", userEmail: "another.user@example.com",
-    items: [{ productId: "samsung-galaxy-buds-pro", name: "Samsung Galaxy Buds Pro", price: 11499, quantity: 1, image: "https://i.postimg.cc/8zt21SCR/Galaxy-Buds-Pro-PR-main1.jpg", stock: 10 }], 
-    totalAmount: 11499, status: "Processing", orderDate: new Date(Date.now() - 1000*60*60*24*1).toISOString(),
-    shippingAddress: { fullName: "Jane Smith", address: "456 Oak Ave", city: "Otherville", postalCode: "67890", country: "India"},
-    paymentMethod: "COD"
-  },
-  { 
-    id: "TG-901234", userId: "user3", userEmail: "test.shopper@example.com",
-    items: [{ productId: "razer-blackwidow-keyboard", name: "Razer BlackWidow Keyboard", price: 8499, quantity: 1, image: "https://placehold.co/600x400.png", stock: 10 }], 
-    totalAmount: 8499, status: "Pending", orderDate: new Date(Date.now() - 1000*60*30).toISOString(), // 30 mins ago
-    shippingAddress: { fullName: "Test Shopper", address: "789 Pine Rd", city: "Testburg", postalCode: "54321", country: "India"},
-    paymentMethod: "COD"
-  },
-   { 
-    id: "TG-567890", userId: "user1", userEmail: "customer1@example.com",
-    items: [{ productId: "dell-laptop-sleeve", name: "Dell Inspiron Laptop Sleeve", price: 1199, quantity: 2, image: "https://i.postimg.cc/3JWSgvrv/dell-gen-snp-carrying-cases-laptop-sleeve-pe21vx-800x620.avif", stock: 10 }], 
-    totalAmount: 2398, status: "Cancelled", orderDate: new Date(Date.now() - 1000*60*60*24*10).toISOString(), 
-    shippingAddress: { fullName: "John Doe", address: "123 Main St", city: "Anytown", postalCode: "12345", country: "India"},
-    paymentMethod: "COD"
-  },
-];
+// Mock data for orders is no longer the primary source for user-facing order history.
+// These can be removed or kept for admin panel if it still uses them.
+// For this change, I will remove them to avoid confusion.
+// export let orders: Order[] = []; // Orders will now be fetched from Supabase.
 
 
 export const getProductsByCategory = (categorySlug: string): Product[] => {
@@ -190,6 +154,8 @@ export const getProductsByCategory = (categorySlug: string): Product[] => {
 };
 
 export const getProductById = (productId: string): Product | undefined => {
+  // This might still be used by product detail page if it's not fetching from Supabase yet.
+  // Or if cart needs to look up product details from mock data.
   return products.find(product => product.id === productId);
 };
 
@@ -197,41 +163,17 @@ export const getCategoryBySlug = (slug: string): Category | undefined => {
   return categories.find(category => category.slug === slug);
 };
 
-// Mock function to get all orders (for admin)
-export const getAllOrders = (): Order[] => {
-  return orders;
-};
+// --- Removed Mock Order Functions ---
+// export const getAllOrders = (): Order[] => { ... };
+// export const getUserOrders = (userId: string): Order[] => { ... };
+// export const getOrderById = (orderId: string): Order | undefined => { ... };
+// export const updateOrderStatus = (orderId: string, status: OrderStatus): boolean => { ... };
+// export const addOrder = (newOrder: Order): void => { ... };
 
-// Mock function to get orders for a specific user
-export const getUserOrders = (userId: string): Order[] => {
-  return orders.filter(order => order.userId === userId).sort((a,b) => new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime());
-};
-
-// Mock function to get a specific order by ID
-export const getOrderById = (orderId: string): Order | undefined => {
-  return orders.find(order => order.id === orderId);
-};
-
-// Mock function to update order status (simulated)
-export const updateOrderStatus = (orderId: string, status: OrderStatus): boolean => {
-  const orderIndex = orders.findIndex(order => order.id === orderId);
-  if (orderIndex !== -1) {
-    orders[orderIndex].status = status;
-    console.log(`Mock: Order ${orderId} status updated to ${status}`);
-    return true; // Simulate success
-  }
-  console.log(`Mock: Order ${orderId} not found for status update.`);
-  return false; // Simulate failure (order not found)
-};
-
-// Mock function to "add" an order to the in-memory array
-export const addOrder = (newOrder: Order): void => {
-  orders.unshift(newOrder); // Add to the beginning to show newest first
-  console.log(`Mock: Order ${newOrder.id} added to mock data.`);
-};
-
-// Mock function to update product stock in the in-memory array
-export const updateProductStock = (productId: string, quantitySold: number): boolean => {
+// Mock product stock update, might still be used if cart/checkout doesn't fully use Supabase products yet.
+// Or can be removed if checkout fully updates Supabase product stock.
+// For now, keeping it as an example, but it's not tied to Supabase.
+export const updateMockProductStock = (productId: string, quantitySold: number): boolean => {
   const productIndex = products.findIndex(p => p.id === productId);
   if (productIndex !== -1) {
     const newStock = products[productIndex].stock - quantitySold;
