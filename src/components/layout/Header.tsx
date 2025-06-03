@@ -2,7 +2,7 @@
 "use client";
 
 import Link from 'next/link';
-import { ShoppingCart, User, LogIn, Menu, PackageSearch, LogOut, X as CloseIcon } from 'lucide-react';
+import { ShoppingCart, User, LogIn, Menu, PackageSearch, LogOut, X as CloseIcon, ChevronDown } from 'lucide-react';
 import { Logo } from '@/components/shared/Logo';
 import { Button } from '@/components/ui/button';
 import { useCart } from '@/contexts/CartContext';
@@ -11,15 +11,24 @@ import {
   SheetContent,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation'; 
+import { useRouter } from 'next/navigation';
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from '@/lib/supabaseClient';
 import type { User as AuthUser } from '@supabase/supabase-js';
 import type { SupabaseAdmin } from '@/lib/types';
 
-const navLinks = [
+const mainNavLinks = [
   { href: '/', label: 'Home' },
+];
+
+const categoryNavLinks = [
   { href: '/category/laptops', label: 'Laptops' },
   { href: '/category/keyboards', label: 'Keyboards' },
   { href: '/category/mice', label: 'Mice' },
@@ -42,31 +51,40 @@ export function Header() {
   useEffect(() => {
     const getSessionAndUser = async () => {
       setIsLoadingAuth(true);
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError) {
+        console.error("Error getting session:", sessionError.message);
+        setIsLoadingAuth(false);
+        return;
+      }
+      
       const user = session?.user ?? null;
       setAuthUser(user);
 
       if (user) {
-        // Fetch name from profiles table (or use user_metadata as fallback)
-        const { data: profileData } = await supabase
+        const { data: profileData, error: profileError } = await supabase
           .from('profiles')
           .select('full_name')
           .eq('id', user.id)
           .single();
+
+        if (profileError && profileError.code !== 'PGRST116') { // PGRST116: row not found
+          console.error("Error fetching profile:", profileError.message);
+        }
         setUserName(profileData?.full_name || user.user_metadata?.full_name || user.email || null);
 
-        // Check if user is an admin
         const { data: adminData, error: adminError } = await supabase
           .from('admins')
           .select('id')
           .eq('id', user.id)
-          .maybeSingle(); // use maybeSingle to not error if not found
+          .maybeSingle();
 
         if (adminError) {
           console.error("Error checking admin status:", adminError.message);
           setIsAdminUser(false);
         } else {
-          setIsAdminUser(!!adminData); // True if adminData is not null
+          setIsAdminUser(!!adminData);
         }
       } else {
         setUserName(null);
@@ -82,11 +100,15 @@ export function Header() {
       const user = session?.user ?? null;
       setAuthUser(user);
       if (user) {
-         const { data: profileData } = await supabase
+         const { data: profileData, error: profileError } = await supabase
           .from('profiles')
           .select('full_name')
           .eq('id', user.id)
           .single();
+        
+        if (profileError && profileError.code !== 'PGRST116') {
+          console.error("Error fetching profile on auth change:", profileError.message);
+        }
         setUserName(profileData?.full_name || user.user_metadata?.full_name || user.email || null);
         
         const { data: adminData, error: adminError } = await supabase
@@ -112,7 +134,7 @@ export function Header() {
     return () => {
       authListener.subscription.unsubscribe();
     };
-  }, [router]);
+  }, []);
 
 
   const closeMobileMenu = () => setIsMobileMenuOpen(false);
@@ -125,12 +147,11 @@ export function Header() {
       toast({ title: "Logout Failed", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Logged Out", description: "You have been successfully logged out." });
-      setAuthUser(null);
-      setIsAdminUser(false);
-      setUserName(null);
-      router.push('/login'); 
-      router.refresh(); // Ensure server components relying on auth state refresh
+      // Auth state will update via onAuthStateChange listener
     }
+    // No need to manually setAuthUser, setIsAdminUser, setUserName here as onAuthStateChange handles it.
+    router.push('/login'); 
+    router.refresh(); 
     setIsLoadingAuth(false);
   };
   
@@ -146,16 +167,32 @@ export function Header() {
       <div className="container mx-auto flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
         <Logo />
         
-        <nav className="hidden md:flex items-center space-x-6">
-          {navLinks.map(link => (
+        <nav className="hidden md:flex items-center space-x-1 lg:space-x-4">
+          {mainNavLinks.map(link => (
             <Link 
               key={link.href} 
               href={link.href} 
-              className="text-sm font-medium text-foreground/80 hover:text-primary transition-colors"
+              className="px-3 py-2 text-sm font-medium text-foreground/80 hover:text-primary transition-colors"
             >
               {link.label}
             </Link>
           ))}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" className="px-3 py-2 text-sm font-medium text-foreground/80 hover:text-primary transition-colors">
+                Categories <ChevronDown className="ml-1 h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              {categoryNavLinks.map(link => (
+                <DropdownMenuItem key={link.href} asChild>
+                  <Link href={link.href} className="w-full">
+                    {link.label}
+                  </Link>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </nav>
 
         <div className="flex items-center space-x-2 sm:space-x-4">
@@ -213,7 +250,7 @@ export function Header() {
                   <span className="sr-only">Toggle menu</span>
                 </Button>
               </SheetTrigger>
-              <SheetContent side="right" className="w-[300px] sm:w-[400px] bg-background">
+              <SheetContent side="right" className="w-[300px] sm:w-[400px] bg-background overflow-y-auto">
                 <div className="p-6">
                   <div className="mb-6 flex justify-between items-center">
                     <Logo />
@@ -222,36 +259,54 @@ export function Header() {
                         <span className="sr-only">Close menu</span>
                     </Button>
                   </div>
-                  <nav className="flex flex-col space-y-4">
-                    {navLinks.map(link => (
+                  <nav className="flex flex-col space-y-2">
+                    {mainNavLinks.map(link => (
                       <Link 
                         key={`mobile-${link.href}`} 
                         href={link.href} 
                         onClick={closeMobileMenu} 
-                        className="text-lg font-medium text-foreground hover:text-primary transition-colors"
+                        className="block py-2 text-lg font-medium text-foreground hover:text-primary transition-colors"
                       >
                         {link.label}
                       </Link>
                     ))}
-                    <hr/>
+                    
+                    <div className="py-2">
+                      <p className="text-lg font-medium text-foreground mb-1">Categories</p>
+                      <div className="flex flex-col space-y-1 pl-3 border-l border-muted">
+                        {categoryNavLinks.map(link => (
+                          <Link 
+                            key={`mobile-cat-${link.href}`} 
+                            href={link.href} 
+                            onClick={closeMobileMenu} 
+                            className="block py-1.5 text-md text-foreground/80 hover:text-primary transition-colors"
+                          >
+                            {link.label}
+                          </Link>
+                        ))}
+                      </div>
+                    </div>
+                    
+                    <hr className="my-4"/>
+
                     {isLoadingAuth ? (
-                       <p className="text-lg font-medium text-muted-foreground flex items-center">Loading user...</p>
+                       <p className="py-2 text-lg font-medium text-muted-foreground flex items-center">Loading user...</p>
                     ): authUser ? (
                       <>
-                        <Link href="/orders" onClick={closeMobileMenu} className="text-lg font-medium text-foreground hover:text-primary transition-colors flex items-center">
+                        <Link href="/orders" onClick={closeMobileMenu} className="py-2 text-lg font-medium text-foreground hover:text-primary transition-colors flex items-center">
                            <User className="mr-2 h-5 w-5" /> {userName || 'My Orders'}
                         </Link>
                         {isAdminUser && (
-                          <Link href="/admin" onClick={closeMobileMenu} className="text-lg font-medium text-foreground hover:text-primary transition-colors flex items-center">
+                          <Link href="/admin" onClick={closeMobileMenu} className="py-2 text-lg font-medium text-foreground hover:text-primary transition-colors flex items-center">
                               <PackageSearch className="mr-2 h-5 w-5" /> Admin Panel
                           </Link>
                         )}
-                        <Button variant="outline" onClick={handleLogout} className="w-full justify-start text-lg py-6">
+                        <Button variant="outline" onClick={handleLogout} className="w-full justify-start text-lg py-3 mt-2">
                           <LogOut className="mr-2 h-5 w-5" /> Logout
                         </Button>
                       </>
                     ) : (
-                      <Link href="/login" onClick={closeMobileMenu} className="text-lg font-medium text-foreground hover:text-primary transition-colors flex items-center">
+                      <Link href="/login" onClick={closeMobileMenu} className="py-2 text-lg font-medium text-foreground hover:text-primary transition-colors flex items-center">
                          <LogIn className="mr-2 h-5 w-5" /> Login / Signup
                       </Link>
                     )}
@@ -265,3 +320,5 @@ export function Header() {
     </header>
   );
 }
+
+    
