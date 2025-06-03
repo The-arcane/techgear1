@@ -42,13 +42,7 @@ export default async function ProfilePage() {
     {
       cookies: {
         get(name: string) {
-          return cookieStore.get(name)?.value
-        },
-        set(name: string, value: string, options: CookieOptions) {
-          cookieStore.set({ name, value, ...options })
-        },
-        remove(name: string, options: CookieOptions) {
-          cookieStore.set({ name, value: '', ...options })
+          return cookieStore.get(name)?.value;
         },
       },
     }
@@ -94,13 +88,14 @@ export default async function ProfilePage() {
   
   if (!profile) {
     console.warn(`[ProfilePage] Profile not found for user ID: ${user.id}. This usually means the profile was not created after signup (database trigger issue).`);
+    // Consider creating a profile on-the-fly or guiding the user, for now, showing an error.
     return (
       <div className="text-center py-12">
         <UserCircle className="mx-auto h-16 w-16 text-muted-foreground mb-4" />
         <h1 className="text-3xl font-bold mb-2">Profile Not Found</h1>
         <p className="text-muted-foreground mb-6">
           We couldn't find a profile associated with your account. 
-          Please ensure your account setup was fully completed (e.g., a database trigger should create a profile upon signup).
+          This may happen if account setup wasn't fully completed.
         </p>
         <Link href="/">
             <Button variant="outline">Back to Home</Button>

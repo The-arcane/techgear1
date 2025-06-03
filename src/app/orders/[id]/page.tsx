@@ -85,7 +85,6 @@ export async function generateMetadata({ params }: UserOrderDetailPageProps): Pr
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
   
-  // Create a temporary Supabase client for metadata generation
   const supabase = createServerClient<Database>(
     supabaseUrl,
     supabaseAnonKey,
@@ -150,13 +149,7 @@ export default async function UserOrderDetailPage({ params }: UserOrderDetailPag
     {
       cookies: {
         get(name: string) {
-          return cookieStore.get(name)?.value
-        },
-        set(name: string, value: string, options: CookieOptions) {
-          cookieStore.set({ name, value, ...options })
-        },
-        remove(name: string, options: CookieOptions) {
-          cookieStore.set({ name, value: '', ...options })
+          return cookieStore.get(name)?.value;
         },
       },
     }

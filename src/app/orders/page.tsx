@@ -28,9 +28,6 @@ export default async function OrdersPage() {
 
   if (!supabaseUrl || !supabaseAnonKey) {
     console.error("[OrdersPage] Supabase URL or Anon Key is missing from environment variables on the server.");
-    // This is a critical configuration error.
-    // You might want to throw an error or redirect to an error page.
-    // For now, logging and attempting to proceed (which will likely fail auth).
     return (
         <div className="text-center py-12">
             <AlertTriangle className="mx-auto h-12 w-12 text-destructive mb-4" />
@@ -46,14 +43,10 @@ export default async function OrdersPage() {
     {
       cookies: {
         get(name: string) {
-          return cookieStore.get(name)?.value
+          return cookieStore.get(name)?.value;
         },
-        set(name: string, value: string, options: CookieOptions) {
-          cookieStore.set({ name, value, ...options })
-        },
-        remove(name: string, options: CookieOptions) {
-          cookieStore.set({ name, value: '', ...options })
-        },
+        // For server components, only 'get' is typically needed for an incoming request.
+        // 'set' and 'remove' are handled by middleware for the response.
       },
     }
   );
