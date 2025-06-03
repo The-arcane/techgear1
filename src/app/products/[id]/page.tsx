@@ -1,6 +1,5 @@
 
 import Image from 'next/image';
-// import { getProductById, products as allProducts } from '@/lib/data'; // Using allProducts for generateStaticParams
 import { AddToCartButton } from '@/components/products/AddToCartButton';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -16,19 +15,35 @@ type ProductPageProps = {
 };
 
 async function getProductById(productId: string): Promise<Product | null> {
-  // Prefer NEXT_PUBLIC_APP_URL for server-side fetches if available
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || '';
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+
+  if (!appUrl) {
+    console.error(
+      `ERROR: The NEXT_PUBLIC_APP_URL environment variable is not set. 
+      This is required for server-side API calls to function correctly (e.g., for product detail pages).
+      Please create or update your .env.local file in the root of your project and add:
+      NEXT_PUBLIC_APP_URL=http://localhost:9002 
+      (Replace 9002 with your actual development port if different).
+      Then, restart your development server.`
+    );
+    throw new Error(
+      "Configuration Error: NEXT_PUBLIC_APP_URL environment variable is not set. This is crucial for server-side API calls."
+    );
+  }
+
+  const fetchUrl = `${appUrl}/api/products/${productId}`;
+
   try {
-    const res = await fetch(`${baseUrl}/api/products/${productId}`, { cache: 'no-store' }); // Fetch fresh data
+    const res = await fetch(fetchUrl, { cache: 'no-store' }); // Fetch fresh data
     if (!res.ok) {
       if (res.status === 404) return null;
-      console.error(`Failed to fetch product ${productId}: ${res.statusText}`);
+      console.error(`Failed to fetch product ${productId} from ${fetchUrl}: ${res.status} ${res.statusText}`);
       return null;
     }
     const data = await res.json();
     return data.product;
   } catch (error) {
-    console.error(`Error fetching product ${productId}:`, error);
+    console.error(`Error fetching product ${productId} from ${fetchUrl}:`, error);
     return null;
   }
 }
@@ -38,25 +53,20 @@ export async function generateMetadata({ params }: ProductPageProps): Promise<Me
   const product = await getProductById(params.id);
   if (!product) {
     return {
-      title: 'Product Not Found',
+      title: 'Product Not Found | TechGear',
+      description: 'The product you are looking for could not be found.',
     };
   }
   return {
     title: `${product.name} | TechGear`,
-    description: product.description,
+    description: product.description.substring(0, 160), // Keep description concise for metadata
+    openGraph: {
+        title: `${product.name} | TechGear`,
+        description: product.description.substring(0, 160),
+        images: product.images[0] ? [{ url: product.images[0] }] : [],
+    }
   };
 }
-
-// Removing generateStaticParams to make the page dynamically rendered for now.
-// It can be re-added later by fetching all product IDs from the API if performance becomes an issue.
-// export async function generateStaticParams() {
-//   const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || ''}/api/products`);
-//   if (!res.ok) return [];
-//   const { products: fetchedProducts } = await res.json();
-//   return fetchedProducts.map((product: Product) => ({
-//     id: product.id.toString(),
-//   }));
-// }
 
 export default async function ProductPage({ params }: ProductPageProps) {
   const { id } = params;
@@ -65,14 +75,15 @@ export default async function ProductPage({ params }: ProductPageProps) {
   if (!product) {
     return (
       <div className="text-center py-12">
-        <h1 className="text-3xl font-bold mb-4">Product Not Found</h1>
-        <p className="text-muted-foreground">
-          The product you are looking for does not exist or may have been removed.
+        <AlertTriangle className="mx-auto h-12 w-12 text-destructive mb-4" />
+        <h1 className="text-3xl font-bold mb-2">Product Not Found</h1>
+        <p className="text-muted-foreground mb-6">
+          The product you are looking for (ID: {id}) does not exist or may have been removed.
         </p>
         <Link href="/" className="mt-6 inline-block">
-           <button className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90">
+           <Button variant="outline">
             Back to Home
-          </button>
+          </Button>
         </Link>
       </div>
     );
@@ -105,7 +116,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
             <div className="p-4 md:p-8">
               <div className="relative aspect-square w-full max-w-md mx-auto rounded-lg overflow-hidden shadow-lg">
                 <Image
-                  src={product.images[0]}
+                  src={product.images[0] || 'https://placehold.co/600x400.png'}
                   alt={product.name}
                   layout="fill"
                   objectFit="contain" // Use contain to show full image
@@ -179,7 +190,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
                     </TableBody>
                   </Table>
                 ) : (
-                  <p className="text-muted-foreground">No specifications available.</p>
+                  <p className="text-muted-foreground">No specifications available for this product.</p>
                 )}
               </div>
             </CardContent>
