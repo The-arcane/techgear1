@@ -1,11 +1,11 @@
 
 export interface Product {
-  id: string;
+  id: string; // This is kept as string because the API and mock data use it. Parsed to int for DB ops if needed.
   name: string;
   description: string;
   categorySlug: string;
   price: number;
-  images: string[]; // Will be populated with image_url from Supabase, or a placeholder
+  images: string[];
   specifications: Record<string, string>;
   stock: number;
 }
@@ -19,12 +19,12 @@ export interface Category {
 }
 
 export interface CartItem {
-  productId: string;
+  productId: string; // String ID, matches Product.id. Will be parsed to int for order_items if DB product_id is int.
   name: string;
   price: number;
   quantity: number;
   image: string;
-  stock: number;
+  stock: number; // Current stock of the product, used for cart validation
 }
 
 export interface ShippingAddress {
@@ -37,20 +37,23 @@ export interface ShippingAddress {
 
 export type OrderStatus = 'Pending' | 'Processing' | 'Shipped' | 'Delivered' | 'Cancelled';
 
+// This Order type is for client-side representation, might differ slightly from direct DB structure
 export interface Order {
-  id: string; 
-  userId: string; 
-  userEmail?: string; 
-  items: CartItem[];
+  id: string; // Supabase ID will be number, but often handled as string in JS. Confirmation page uses string.
+  userId: string;
+  userEmail?: string;
+  items: CartItem[]; // For display, might be enriched later
   totalAmount: number;
   status: OrderStatus;
-  orderDate: string; 
+  orderDate: string;
   shippingAddress: ShippingAddress;
   paymentMethod: 'COD';
+  // Supabase specific fields if needed directly on this type
+  db_id?: number; // To store the actual numeric ID from Supabase if needed elsewhere
 }
 
 export interface User {
-  id: string; 
+  id: string;
   email: string;
   name?: string;
 }
@@ -71,25 +74,37 @@ export interface SupabaseProduct {
   price: number; // numeric
   category: string; // text
   stock: number; // int4
-  image_url: string; // text
+  image_url?: string | null; // text, can be null
   created_at: string; // timestamptz, Supabase client returns as ISO string
 }
 
-export interface SupabaseOrder {
-  id: number; // int4, primary key
-  user_id: string; // uuid, foreign key to auth.users.id
-  status: string; // text, e.g., 'Pending', 'Shipped'
-  payment_mode: string; // text, e.g., 'COD'
-  total_amount: number; // numeric
-  created_at: string; // timestamptz
+export interface SupabaseOrderInsert {
+  user_id: string;
+  user_email?: string;
+  status: string;
+  payment_method: string;
+  total_amount: number;
+  shipping_address: ShippingAddress; // Stored as JSONB
+  // created_at is auto-generated
 }
 
-export interface SupabaseOrderItem {
-  id: number; // int4, primary key
-  order_id: number; // int4, foreign key to orders.id
-  product_id: number; // int4, foreign key to products.id
-  quantity: number; // int4
-  price_at_time: number; // numeric
+export interface SupabaseOrderFetched {
+    id: number; // Actual DB ID
+    user_id: string;
+    user_email?: string;
+    status: string;
+    payment_method: string;
+    total_amount: number;
+    shipping_address: ShippingAddress;
+    created_at: string;
+}
+
+
+export interface SupabaseOrderItemInsert {
+  order_id: number;
+  product_id: number; // Assuming products.id in DB is integer
+  quantity: number;
+  price_at_time: number;
 }
 
 export interface SupabaseAdmin {
