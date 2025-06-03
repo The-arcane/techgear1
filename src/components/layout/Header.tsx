@@ -12,10 +12,11 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { useState, useEffect } from 'react';
-import { useRouter, usePathname } from 'next/navigation'; 
+import { useRouter } from 'next/navigation'; 
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from '@/lib/supabaseClient';
 import type { User as AuthUser } from '@supabase/supabase-js';
+import type { SupabaseAdmin } from '@/lib/types';
 
 const navLinks = [
   { href: '/', label: 'Home' },
@@ -34,57 +35,103 @@ export function Header() {
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [isAdminUser, setIsAdminUser] = useState(false);
   const [userName, setUserName] = useState<string | null>(null);
+  const [isLoadingAuth, setIsLoadingAuth] = useState(true);
   
   const router = useRouter();
-  const pathname = usePathname(); 
 
   useEffect(() => {
-    const getSession = async () => {
+    const getSessionAndUser = async () => {
+      setIsLoadingAuth(true);
       const { data: { session } } = await supabase.auth.getSession();
-      setAuthUser(session?.user ?? null);
-    };
-    getSession();
+      const user = session?.user ?? null;
+      setAuthUser(user);
 
-    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
-      setAuthUser(session?.user ?? null);
+      if (user) {
+        // Fetch name from profiles table (or use user_metadata as fallback)
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('full_name')
+          .eq('id', user.id)
+          .single();
+        setUserName(profileData?.full_name || user.user_metadata?.full_name || user.email || null);
+
+        // Check if user is an admin
+        const { data: adminData, error: adminError } = await supabase
+          .from('admins')
+          .select('id')
+          .eq('id', user.id)
+          .maybeSingle(); // use maybeSingle to not error if not found
+
+        if (adminError) {
+          console.error("Error checking admin status:", adminError.message);
+          setIsAdminUser(false);
+        } else {
+          setIsAdminUser(!!adminData); // True if adminData is not null
+        }
+      } else {
+        setUserName(null);
+        setIsAdminUser(false);
+      }
+      setIsLoadingAuth(false);
+    };
+
+    getSessionAndUser();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      setIsLoadingAuth(true);
+      const user = session?.user ?? null;
+      setAuthUser(user);
+      if (user) {
+         const { data: profileData } = await supabase
+          .from('profiles')
+          .select('full_name')
+          .eq('id', user.id)
+          .single();
+        setUserName(profileData?.full_name || user.user_metadata?.full_name || user.email || null);
+        
+        const { data: adminData, error: adminError } = await supabase
+          .from('admins')
+          .select('id')
+          .eq('id', user.id)
+          .maybeSingle();
+        
+        if (adminError) {
+          console.error("Error checking admin status on auth change:", adminError.message);
+          setIsAdminUser(false);
+        } else {
+          setIsAdminUser(!!adminData);
+        }
+      } else {
+        setUserName(null);
+        setIsAdminUser(false);
+      }
+      setIsLoadingAuth(false);
+      // router.refresh(); // Refresh to update server components if needed, but be cautious with layout shifts
     });
 
     return () => {
       authListener.subscription.unsubscribe();
     };
-  }, []);
+  }, [router]);
 
-  useEffect(() => {
-    if (authUser) {
-      // For user name, prioritize profile data if fetched, then user_metadata, then email
-      // This part would typically involve fetching from your 'profiles' table
-      // For now, using user_metadata.full_name or email
-      setUserName(authUser.user_metadata?.full_name || authUser.email || null);
-      
-      // Admin check: This is a simplified check.
-      // In a real app, use custom claims (e.g., authUser.app_metadata?.claims_admin)
-      // or check a role from your 'profiles' or a dedicated 'user_roles' table.
-      const isAdmin = authUser.email === 'raunaq.adlakha@gmail.com' || authUser.user_metadata?.role === 'admin';
-      setIsAdminUser(isAdmin);
-
-    } else {
-      setUserName(null);
-      setIsAdminUser(false);
-    }
-  }, [authUser]);
 
   const closeMobileMenu = () => setIsMobileMenuOpen(false);
 
   const handleLogout = async () => {
+    setIsLoadingAuth(true);
     const { error } = await supabase.auth.signOut();
     closeMobileMenu();
     if (error) {
       toast({ title: "Logout Failed", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Logged Out", description: "You have been successfully logged out." });
-      router.push('/login'); // Redirect to login after logout
-      router.refresh(); // Refresh to ensure layout updates
+      setAuthUser(null);
+      setIsAdminUser(false);
+      setUserName(null);
+      router.push('/login'); 
+      router.refresh(); // Ensure server components relying on auth state refresh
     }
+    setIsLoadingAuth(false);
   };
   
   const CartLinkPlaceholder = () => (
@@ -93,9 +140,6 @@ export function Header() {
     </Button>
   );
 
-  // Check if component has mounted to avoid hydration issues with authUser state
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -115,7 +159,7 @@ export function Header() {
         </nav>
 
         <div className="flex items-center space-x-2 sm:space-x-4">
-          {mounted ? (
+          {!isLoadingAuth ? (
             <Link href="/cart">
               <Button variant="ghost" size="icon" aria-label="Shopping Cart" className="relative">
                 <ShoppingCart className="h-5 w-5" />
@@ -131,7 +175,9 @@ export function Header() {
           )}
 
           <div className="hidden md:flex items-center space-x-2">
-            {mounted && authUser ? (
+            {isLoadingAuth ? (
+              <Button variant="ghost" size="sm" disabled><LogIn className="mr-2 h-4 w-4" /> Loading...</Button>
+            ) : authUser ? (
               <>
                 <Link href="/orders">
                   <Button variant="ghost" size="sm" aria-label="My Account" className="flex items-center">
@@ -150,13 +196,13 @@ export function Header() {
                   <LogOut className="mr-2 h-4 w-4" /> Logout
                 </Button>
               </>
-            ) : mounted ? (
+            ) : (
               <Link href="/login">
                 <Button variant="ghost" size="sm">
                   <LogIn className="mr-2 h-4 w-4" /> Login
                 </Button>
               </Link>
-            ) : <Button variant="ghost" size="sm" disabled><LogIn className="mr-2 h-4 w-4" /> Login</Button> }
+            )}
           </div>
 
           <div className="md:hidden">
@@ -188,7 +234,9 @@ export function Header() {
                       </Link>
                     ))}
                     <hr/>
-                    {mounted && authUser ? (
+                    {isLoadingAuth ? (
+                       <p className="text-lg font-medium text-muted-foreground flex items-center">Loading user...</p>
+                    ): authUser ? (
                       <>
                         <Link href="/orders" onClick={closeMobileMenu} className="text-lg font-medium text-foreground hover:text-primary transition-colors flex items-center">
                            <User className="mr-2 h-5 w-5" /> {userName || 'My Orders'}
@@ -202,11 +250,11 @@ export function Header() {
                           <LogOut className="mr-2 h-5 w-5" /> Logout
                         </Button>
                       </>
-                    ) : mounted ? (
+                    ) : (
                       <Link href="/login" onClick={closeMobileMenu} className="text-lg font-medium text-foreground hover:text-primary transition-colors flex items-center">
                          <LogIn className="mr-2 h-5 w-5" /> Login / Signup
                       </Link>
-                    ) : null}
+                    )}
                   </nav>
                 </div>
               </SheetContent>

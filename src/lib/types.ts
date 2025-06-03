@@ -56,7 +56,7 @@ export interface User {
   id: string; // Supabase auth user ID (uuid)
   email: string;
   name?: string; // from profiles table 'full_name'
-  role: 'user' | 'admin'; // This might be managed via custom claims or a roles table in Supabase
+  // role: 'user' | 'admin'; // Role will be determined by existence in 'admins' table
 }
 
 // Define Supabase table structures for type safety if needed directly
@@ -95,4 +95,16 @@ export interface SupabaseOrderItem {
   product_id: number;
   quantity: number;
   price_at_time: number;
+}
+
+export interface SupabaseAdmin {
+  id: string; // uuid, references auth.users(id)
+  full_name: string;
+  email: string;
+  can_manage_products?: boolean;
+  can_manage_orders?: boolean;
+  can_manage_users?: boolean;
+  can_manage_categories?: boolean;
+  can_manage_store_settings?: boolean;
+  created_at?: string;
 }

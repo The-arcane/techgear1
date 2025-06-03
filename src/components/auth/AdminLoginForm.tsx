@@ -22,34 +22,46 @@ export function AdminLoginForm() {
     e.preventDefault();
     setIsLoading(true);
 
-    const { data, error } = await supabase.auth.signInWithPassword({
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
       email: email,
       password: password,
     });
     
-    setIsLoading(false);
+    if (authError) {
+      setIsLoading(false);
+      toast({ title: "Admin Login Failed", description: authError.message, variant: "destructive" });
+      return;
+    }
 
-    if (error) {
-      toast({ title: "Admin Login Failed", description: error.message, variant: "destructive" });
-    } else if (data.user && data.session) {
-      // Check for admin role. This is a placeholder.
-      // In a real Supabase app, roles can be managed via custom claims or a separate 'roles' table.
-      // For custom claims, you might check: data.user.app_metadata?.claims_admin === true
-      // Or, you might have a 'role' field in user_metadata, e.g. data.user.user_metadata?.role === 'admin'
-      // For this example, we'll check a mock 'role' in user_metadata or if email matches your admin email.
-      const isAdmin = data.user.email === 'raunaq.adlakha@gmail.com' || data.user.user_metadata?.role === 'admin';
+    if (authData.user && authData.session) {
+      // Check if the user is in the 'admins' table
+      const { data: adminData, error: adminCheckError } = await supabase
+        .from('admins')
+        .select('id')
+        .eq('id', authData.user.id)
+        .maybeSingle(); // Use maybeSingle to not error if user not found in admins
 
-      if (isAdmin) {
+      setIsLoading(false);
+
+      if (adminCheckError) {
+        console.error("Error checking admin table:", adminCheckError.message);
+        await supabase.auth.signOut(); // Sign out as a precaution
+        toast({ title: "Login Error", description: "Could not verify admin status. Please try again.", variant: "destructive" });
+        return;
+      }
+
+      if (adminData) { // If adminData is not null, user is an admin
         toast({ title: "Admin Login Successful", description: "Redirecting to admin panel..." });
-        // Supabase client handles session persistence.
         router.push('/admin');
-        router.refresh();
+        router.refresh(); // Important to update layout/auth state for other parts of app
       } else {
         await supabase.auth.signOut(); // Sign out non-admin users immediately
         toast({ title: "Login Failed", description: "Not an authorized admin account.", variant: "destructive" });
       }
     } else {
-       toast({ title: "Admin Login Failed", description: "Invalid email or password.", variant: "destructive" });
+      setIsLoading(false);
+      // This case should ideally not be reached if authError is handled
+      toast({ title: "Admin Login Failed", description: "Invalid email or password, or unexpected issue.", variant: "destructive" });
     }
   };
 
@@ -82,7 +94,7 @@ export function AdminLoginForm() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               disabled={isLoading}
-              placeholder="Rahu45$"
+              placeholder="Enter admin password"
             />
           </div>
         </CardContent>
