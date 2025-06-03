@@ -3,10 +3,9 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function middleware(request: NextRequest) {
-  console.log(`[Middleware] Running for path: ${request.nextUrl.pathname}`);
+  const requestStartTime = Date.now();
+  console.log(`[Middleware] Path: ${request.nextUrl.pathname}. Start time: ${requestStartTime}`);
 
-  // Initialize response at the beginning. This response object will be returned.
-  // It can be mutated by Supabase client's cookie handlers.
   let response = NextResponse.next({
     request: {
       headers: request.headers,
@@ -17,9 +16,8 @@ export async function middleware(request: NextRequest) {
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
   if (!supabaseUrl || !supabaseAnonKey) {
-    console.error("[Middleware] CRITICAL: Supabase URL or Anon Key is missing from environment variables.");
-    // Potentially redirect to an error page or just proceed if some paths don't need auth
-    return response; // Or handle error appropriately
+    console.error("[Middleware] CRITICAL: Supabase URL or Anon Key is missing.");
+    return response;
   }
 
   const supabase = createServerClient(
@@ -31,52 +29,33 @@ export async function middleware(request: NextRequest) {
           return request.cookies.get(name)?.value;
         },
         set(name: string, value: string, options: CookieOptions) {
-          // The `set` method is called by Supabase when it needs to update a cookie.
-          // We need to update both the `request` (for the current server-side pass)
-          // and the `response` (for the browser).
-          request.cookies.set({
-            name,
-            value,
-            ...options,
-          });
-          // Update the response object directly.
-          response.cookies.set({
-            name,
-            value,
-            ...options,
-          });
+          request.cookies.set({ name, value, ...options });
+          response.cookies.set({ name, value, ...options });
         },
         remove(name: string, options: CookieOptions) {
-          // The `remove` method is called by Supabase when it needs to delete a cookie.
-          request.cookies.set({ // Effectively removing by setting an empty value with options
-            name,
-            value: '',
-            ...options,
-          });
-           // Update the response object directly.
-          response.cookies.set({
-            name,
-            value: '',
-            ...options,
-          });
+          request.cookies.set({ name, value: '', ...options });
+          response.cookies.set({ name, value: '', ...options });
         },
       },
     }
   );
 
-  // Refresh session before passing to the page
-  // This will also handle session expiry and refresh tokens.
+  console.log(`[Middleware] Path: ${request.nextUrl.pathname}. About to call supabase.auth.getUser().`);
+  const getUserStartTime = Date.now();
   const { data: { user }, error } = await supabase.auth.getUser();
+  const getUserEndTime = Date.now();
+  console.log(`[Middleware] Path: ${request.nextUrl.pathname}. supabase.auth.getUser() took ${getUserEndTime - getUserStartTime}ms.`);
 
   if (error) {
-    console.error('[Middleware] Error from supabase.auth.getUser():', error.name, error.message, 'Status:', (error as any).status);
+    console.error(`[Middleware] Path: ${request.nextUrl.pathname}. Error from supabase.auth.getUser(): ${error.name} - ${error.message}`, (error as any).status ? `Status: ${(error as any).status}` : '');
   } else if (user) {
-    console.log('[Middleware] User session retrieved/refreshed in middleware. User ID:', user.id);
+    console.log(`[Middleware] Path: ${request.nextUrl.pathname}. User session retrieved/refreshed. User ID: ${user.id}.`);
   } else {
-    console.log('[Middleware] No active user session found by supabase.auth.getUser() in middleware.');
+    console.log(`[Middleware] Path: ${request.nextUrl.pathname}. No active user session found.`);
   }
   
-  // It's important to return the potentially modified response object.
+  const middlewareEndTime = Date.now();
+  console.log(`[Middleware] Path: ${request.nextUrl.pathname}. Total execution time: ${middlewareEndTime - requestStartTime}ms.`);
   return response;
 }
 
