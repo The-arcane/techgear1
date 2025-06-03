@@ -2,7 +2,7 @@
 "use client";
 
 import Link from 'next/link';
-import { ShoppingCart, User, LogIn, Menu, PackageSearch } from 'lucide-react';
+import { ShoppingCart, User, LogIn, Menu, PackageSearch, Zap } from 'lucide-react';
 import { Logo } from '@/components/shared/Logo';
 import { Button } from '@/components/ui/button';
 import { useCart } from '@/contexts/CartContext';
@@ -52,8 +52,10 @@ export function Header() {
         
         <nav className="hidden md:flex items-center space-x-6">
           {navLinks.map(link => (
-            <Link key={link.href} href={link.href} className="text-sm font-medium text-foreground/80 hover:text-primary transition-colors">
-              {link.label}
+            <Link key={link.href} href={link.href} passHref legacyBehavior>
+              <a className="text-sm font-medium text-foreground/80 hover:text-primary transition-colors">
+                {link.label}
+              </a>
             </Link>
           ))}
         </nav>
@@ -76,21 +78,21 @@ export function Header() {
 
           <div className="hidden md:flex items-center space-x-2">
             {isAuthenticated ? (
-              <Link href="/orders">
-                <Button variant="ghost" size="icon" aria-label="My Account">
+              <Link href="/orders" passHref legacyBehavior>
+                <Button variant="ghost" size="icon" aria-label="My Account" asChild={false}>
                   <User className="h-5 w-5" />
                 </Button>
               </Link>
             ) : (
-              <Link href="/login">
-                <Button variant="ghost" size="sm">
+              <Link href="/login" passHref legacyBehavior>
+                <Button variant="ghost" size="sm" asChild={false}>
                   <LogIn className="mr-2 h-4 w-4" /> Login
                 </Button>
               </Link>
             )}
             {isAdmin && (
-               <Link href="/admin">
-                <Button variant="outline" size="sm">
+               <Link href="/admin" passHref legacyBehavior>
+                <Button variant="outline" size="sm" asChild={false}>
                   <PackageSearch className="mr-2 h-4 w-4" /> Admin
                 </Button>
               </Link>
@@ -110,29 +112,31 @@ export function Header() {
                   <Logo />
                   <nav className="mt-8 flex flex-col space-y-4">
                     {navLinks.map(link => (
-                      <Link key={`mobile-${link.href}`} href={link.href} onClick={closeMobileMenu} className="text-lg font-medium text-foreground hover:text-primary transition-colors">
-                        {link.label}
+                      <Link key={`mobile-${link.href}`} href={link.href} passHref legacyBehavior>
+                        <a onClick={closeMobileMenu} className="text-lg font-medium text-foreground hover:text-primary transition-colors">
+                          {link.label}
+                        </a>
                       </Link>
                     ))}
                     <hr/>
-                    {/* 
-                      If isAuthenticated or isAdmin become dynamic (e.g., from context),
-                      these links would also need to be guarded by `isClient` 
-                      or their parent structure deferred until client-side.
-                      Currently, they are fine because the flags are hardcoded.
-                    */}
                     {isAuthenticated ? (
-                      <Link href="/orders" onClick={closeMobileMenu} className="text-lg font-medium text-foreground hover:text-primary transition-colors">
-                        My Orders
+                      <Link href="/orders" passHref legacyBehavior>
+                        <a onClick={closeMobileMenu} className="text-lg font-medium text-foreground hover:text-primary transition-colors">
+                          My Orders
+                        </a>
                       </Link>
                     ) : (
-                      <Link href="/login" onClick={closeMobileMenu} className="text-lg font-medium text-foreground hover:text-primary transition-colors">
-                        Login / Signup
+                      <Link href="/login" passHref legacyBehavior>
+                        <a onClick={closeMobileMenu} className="text-lg font-medium text-foreground hover:text-primary transition-colors">
+                          Login / Signup
+                        </a>
                       </Link>
                     )}
                      {isAdmin && (
-                      <Link href="/admin" onClick={closeMobileMenu} className="text-lg font-medium text-foreground hover:text-primary transition-colors">
-                        Admin Panel
+                      <Link href="/admin" passHref legacyBehavior>
+                        <a onClick={closeMobileMenu} className="text-lg font-medium text-foreground hover:text-primary transition-colors">
+                          Admin Panel
+                        </a>
                       </Link>
                     )}
                   </nav>
