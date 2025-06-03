@@ -12,7 +12,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 
 export function AdminLoginForm() {
-  const [email, setEmail] = useState('raunaq.adlakha@gmail.com'); // Pre-fill for convenience
+  const [email, setEmail] = useState('raunaq.admin@gmail.com'); // Updated pre-fill
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
@@ -69,7 +69,7 @@ export function AdminLoginForm() {
         router.push('/admin');
         router.refresh(); 
       } else {
-        console.warn('[AdminLoginForm] User is NOT an admin. Signing out. Preview Environment');
+        console.warn('[AdminLoginForm] User is NOT an admin. Signing out. User ID checked:', authData.user.id, 'Preview Environment');
         await supabase.auth.signOut(); 
         toast({ title: "Login Failed", description: "Not an authorized admin account.", variant: "destructive" });
       }
