@@ -25,15 +25,18 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState<SupabaseProfile | null>(null);
   const [formData, setFormData] = useState<ProfileFormData>({ full_name: '', phone_number: '', address: '' });
   const [isEditing, setIsEditing] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
+  const [isLoading, setIsLoading] = useState(true); // Page-level loading state for auth and initial profile fetch
+  const [isSaving, setIsSaving] = useState(false); // For save button loading state
   const [error, setError] = useState<string | null>(null);
   
   const { toast } = useToast();
   const router = useRouter();
 
   const fetchProfileData = async (currentUser: AuthUser) => {
-    setIsLoading(true);
+    // This function handles fetching the profile data itself.
+    // The page-level isLoading is for the overall auth check + initial profile load.
+    // We can set it true here to indicate profile fetching, and false in finally.
+    setIsLoading(true); 
     setError(null);
     try {
       const { data, error: profileError } = await supabase
@@ -42,7 +45,7 @@ export default function ProfilePage() {
         .eq('id', currentUser.id)
         .single<SupabaseProfile>();
 
-      if (profileError && profileError.code !== 'PGRST116') { // PGRST116: row not found
+      if (profileError && profileError.code !== 'PGRST116') { 
         throw profileError;
       }
       
@@ -54,7 +57,7 @@ export default function ProfilePage() {
           address: data.address || '',
         });
       } else {
-         console.warn(`Profile not found for user ID: ${currentUser.id}. This might indicate an issue with profile creation post-signup (e.g., database trigger).`);
+         console.warn(`[ProfilePage] Profile not found for user ID: ${currentUser.id}.`);
          setError("Your profile data could not be loaded. It might not have been created yet.");
       }
     } catch (err: any) {
@@ -62,32 +65,25 @@ export default function ProfilePage() {
       setError(err.message || "Could not fetch your profile data.");
       setProfile(null);
     } finally {
-      setIsLoading(false);
+      setIsLoading(false); // Done fetching profile or failed
     }
   };
 
   useEffect(() => {
+    setIsLoading(true); // Start in loading state when component mounts/router changes
+    
     const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log("[ProfilePage] onAuthStateChange event:", event, "Session:", !!session);
       const currentUser = session?.user ?? null;
-      setAuthUser(currentUser);
-      if (currentUser) {
-        fetchProfileData(currentUser);
-      } else {
-        setIsLoading(false);
-        router.push('/login?message=Please login to view your profile.&source=profilepage_authchange');
-      }
-    });
+      setAuthUser(currentUser); 
 
-    // Initial check in case onAuthStateChange doesn't fire immediately or user is already logged in
-    supabase.auth.getUser().then(({ data: { user: initialUser } }) => {
-      if (initialUser) {
-        setAuthUser(initialUser);
-        if (!profile && isLoading) { // Fetch only if not already fetched by onAuthStateChange
-            fetchProfileData(initialUser);
-        }
-      } else if (isLoading) { // If no initial user and still loading, redirect
-        setIsLoading(false);
-        router.push('/login?message=Please login to view your profile.&source=profilepage_initial');
+      if (currentUser) {
+        fetchProfileData(currentUser); // Fetches profile and sets isLoading false in its finally
+      } else {
+        // No user, not loading anymore for auth, redirect.
+        // If fetchProfileData was ongoing, its finally block will also set isLoading false.
+        setIsLoading(false); 
+        router.push('/login?message=Please login to view your profile.&source=profilepage_authchange_nouser');
       }
     });
 
@@ -95,7 +91,7 @@ export default function ProfilePage() {
       authListener.subscription.unsubscribe();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [router]); // router is stable, profile/isLoading are handled by fetchProfileData trigger
+  }, [router]); // Only re-run if router changes
 
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -104,7 +100,7 @@ export default function ProfilePage() {
   };
 
   const handleEditToggle = () => {
-    if (isEditing && profile) { // If cancelling edit
+    if (isEditing && profile) { 
       setFormData({
         full_name: profile.full_name || '',
         phone_number: profile.phone_number || '',
@@ -131,8 +127,8 @@ export default function ProfilePage() {
 
       if (result.success && result.profile) {
         toast({ title: "Success", description: "Profile updated successfully!" });
-        setProfile(result.profile); // Update local profile state with returned data
-         setFormData({ // Update form data as well
+        setProfile(result.profile); 
+         setFormData({ 
           full_name: result.profile.full_name || '',
           phone_number: result.profile.phone_number || '',
           address: result.profile.address || '',
@@ -143,7 +139,7 @@ export default function ProfilePage() {
         toast({ title: "Error Updating Profile", description: errorMsg || "An unknown error occurred.", variant: "destructive" });
       }
     } catch (err) {
-      console.error("Error submitting profile update:", err);
+      console.error("[ProfilePage] Error submitting profile update:", err);
       toast({ title: "Network Error", description: "Could not connect to the server.", variant: "destructive" });
     } finally {
       setIsSaving(false);
@@ -159,8 +155,8 @@ export default function ProfilePage() {
     );
   }
 
-  if (!authUser) {
-     // Should be handled by useEffect redirect, but as a fallback
+  if (!authUser && !isLoading) { // Check !isLoading to ensure auth check completed
+    // This state should ideally be caught by the redirect in onAuthStateChange
     return (
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-200px)]">
         <p className="text-muted-foreground">Redirecting to login...</p>
@@ -168,7 +164,7 @@ export default function ProfilePage() {
     );
   }
   
-  if (error && !profile) {
+  if (error && !profile && authUser) { // Error fetching profile, but user is authenticated
      return (
       <div className="text-center py-12 max-w-md mx-auto">
         <AlertTriangle className="mx-auto h-12 w-12 text-destructive mb-4" />
@@ -181,14 +177,14 @@ export default function ProfilePage() {
   }
   
   // Case where authUser exists, no error, but profile is null (e.g., not created by trigger)
-  if (!profile) {
+  // And not currently loading
+  if (!profile && authUser && !isLoading) {
     return (
       <div className="text-center py-12 max-w-md mx-auto">
         <UserCircle className="mx-auto h-16 w-16 text-muted-foreground mb-4" />
         <h1 className="text-3xl font-bold mb-2">Profile Information Missing</h1>
         <p className="text-muted-foreground mb-6">
           We couldn't find detailed profile information for your account. 
-          This can happen if the account setup (e.g., database trigger for profile creation) wasn't fully completed.
         </p>
         <p className="text-sm text-muted-foreground">You can try to set your profile details below.</p>
         {!isEditing && (
@@ -196,76 +192,62 @@ export default function ProfilePage() {
                 <Edit3 className="mr-2 h-4 w-4" /> Set Profile Details
             </Button>
         )}
-        {/* Fall through to form rendering if isEditing becomes true */}
+         {/* Form will render if isEditing becomes true */}
       </div>
     )
   }
 
+  // Render form if editing, or profile details if not editing AND profile exists
+  if (!authUser) return null; // Should have been caught by loading or redirect
 
   return (
     <div className="space-y-8 max-w-2xl mx-auto">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold font-headline">My Profile</h1>
-        {!isEditing && profile && (
+        {!isEditing && profile && ( // Only show edit if profile exists
           <Button variant="outline" onClick={handleEditToggle}>
             <Edit3 className="mr-2 h-4 w-4" /> Edit Profile
           </Button>
         )}
       </div>
 
-      <form onSubmit={handleSubmit}>
-        <Card className="shadow-lg">
-          <CardHeader>
-            <CardTitle className="text-2xl font-semibold">
-              {isEditing ? "Edit Your Profile" : (profile?.full_name || authUser.email)}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6 pt-4">
-            {/* Full Name */}
-            <div className="space-y-2">
-              <Label htmlFor="full_name" className="flex items-center text-muted-foreground">
-                <UserCircle className="mr-2 h-5 w-5 text-primary/80" /> Full Name
-              </Label>
-              {isEditing ? (
+      { (isEditing || !profile /* Allow form if editing OR if profile is null to create it */) ? (
+        <form onSubmit={handleSubmit}>
+          <Card className="shadow-lg">
+            <CardHeader>
+              <CardTitle className="text-2xl font-semibold">
+                {isEditing ? "Edit Your Profile" : (profile?.full_name || authUser.email)}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6 pt-4">
+              <div className="space-y-2">
+                <Label htmlFor="full_name" className="flex items-center text-muted-foreground">
+                  <UserCircle className="mr-2 h-5 w-5 text-primary/80" /> Full Name
+                </Label>
                 <Input id="full_name" name="full_name" value={formData.full_name} onChange={handleInputChange} disabled={isSaving} />
-              ) : (
-                <p className="font-medium text-lg ml-7">{profile?.full_name || <span className="italic text-muted-foreground/70">Not set</span>}</p>
-              )}
-            </div>
+              </div>
 
-            {/* Email Address (Read-only) */}
-            <div className="space-y-2">
-              <Label htmlFor="email" className="flex items-center text-muted-foreground">
-                <Mail className="mr-2 h-5 w-5 text-primary/80" /> Email Address
-              </Label>
-              <Input id="email" name="email" value={authUser.email || ''} readOnly disabled className="bg-muted/50 cursor-not-allowed ml-7"/>
-            </div>
+              <div className="space-y-2">
+                <Label htmlFor="email" className="flex items-center text-muted-foreground">
+                  <Mail className="mr-2 h-5 w-5 text-primary/80" /> Email Address
+                </Label>
+                <Input id="email" name="email" value={authUser.email || ''} readOnly disabled className="bg-muted/50 cursor-not-allowed ml-7"/>
+              </div>
 
-            {/* Phone Number */}
-            <div className="space-y-2">
-              <Label htmlFor="phone_number" className="flex items-center text-muted-foreground">
-                <Phone className="mr-2 h-5 w-5 text-primary/80" /> Phone Number
-              </Label>
-              {isEditing ? (
+              <div className="space-y-2">
+                <Label htmlFor="phone_number" className="flex items-center text-muted-foreground">
+                  <Phone className="mr-2 h-5 w-5 text-primary/80" /> Phone Number
+                </Label>
                 <Input id="phone_number" name="phone_number" type="tel" value={formData.phone_number} onChange={handleInputChange} disabled={isSaving} placeholder="e.g., +911234567890" />
-              ) : (
-                <p className="font-medium text-lg ml-7">{profile?.phone_number || <span className="italic text-muted-foreground/70">Not set</span>}</p>
-              )}
-            </div>
+              </div>
 
-            {/* Address */}
-            <div className="space-y-2">
-              <Label htmlFor="address" className="flex items-center text-muted-foreground">
-                <MapPin className="mr-2 h-5 w-5 text-primary/80" /> Address
-              </Label>
-              {isEditing ? (
+              <div className="space-y-2">
+                <Label htmlFor="address" className="flex items-center text-muted-foreground">
+                  <MapPin className="mr-2 h-5 w-5 text-primary/80" /> Address
+                </Label>
                 <Textarea id="address" name="address" value={formData.address} onChange={handleInputChange} disabled={isSaving} placeholder="123 Main St, City, State, ZIP"/>
-              ) : (
-                <p className="font-medium text-lg ml-7 whitespace-pre-line">{profile?.address || <span className="italic text-muted-foreground/70">Not set</span>}</p>
-              )}
-            </div>
-          </CardContent>
-          {isEditing && (
+              </div>
+            </CardContent>
             <CardFooter className="flex justify-end gap-2 pt-6">
               <Button type="button" variant="outline" onClick={handleEditToggle} disabled={isSaving}>
                 <XCircle className="mr-2 h-4 w-4" /> Cancel
@@ -275,14 +257,48 @@ export default function ProfilePage() {
                 Save Changes
               </Button>
             </CardFooter>
-          )}
-        </Card>
-      </form>
-       {profile && !isEditing && (
-         <p className="text-xs text-muted-foreground text-center mt-4">
-            User ID: {profile.id}. Last profile data sync from server.
-        </p>
-      )}
+          </Card>
+        </form>
+      ) : profile ? ( // Display profile if not editing and profile exists
+         <Card className="shadow-lg">
+            <CardHeader>
+              <CardTitle className="text-2xl font-semibold">
+                {profile.full_name || authUser.email}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6 pt-4">
+               <div className="space-y-2">
+                <Label htmlFor="p_full_name" className="flex items-center text-muted-foreground">
+                  <UserCircle className="mr-2 h-5 w-5 text-primary/80" /> Full Name
+                </Label>
+                <p id="p_full_name" className="font-medium text-lg ml-7">{profile.full_name || <span className="italic text-muted-foreground/70">Not set</span>}</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="p_email" className="flex items-center text-muted-foreground">
+                  <Mail className="mr-2 h-5 w-5 text-primary/80" /> Email Address
+                </Label>
+                <p id="p_email" className="font-medium text-lg ml-7">{authUser.email}</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="p_phone_number" className="flex items-center text-muted-foreground">
+                  <Phone className="mr-2 h-5 w-5 text-primary/80" /> Phone Number
+                </Label>
+                <p id="p_phone_number" className="font-medium text-lg ml-7">{profile.phone_number || <span className="italic text-muted-foreground/70">Not set</span>}</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="p_address" className="flex items-center text-muted-foreground">
+                  <MapPin className="mr-2 h-5 w-5 text-primary/80" /> Address
+                </Label>
+                <p id="p_address" className="font-medium text-lg ml-7 whitespace-pre-line">{profile.address || <span className="italic text-muted-foreground/70">Not set</span>}</p>
+              </div>
+            </CardContent>
+             <CardFooter className="pt-6">
+                <p className="text-xs text-muted-foreground text-center w-full">
+                    User ID: {profile.id}.
+                </p>
+            </CardFooter>
+          </Card>
+      ) : null /* Should be covered by loading or "Profile Information Missing" */ }
     </div>
   );
 }

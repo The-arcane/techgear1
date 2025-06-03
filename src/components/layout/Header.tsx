@@ -52,83 +52,101 @@ export function Header() {
   useEffect(() => {
     const getSessionAndUser = async () => {
       setIsLoadingAuth(true);
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      
-      if (sessionError) {
-        console.error("Error getting session:", sessionError.message);
-        setIsLoadingAuth(false);
-        return;
-      }
-      
-      const user = session?.user ?? null;
-      setAuthUser(user);
-
-      if (user) {
-        const { data: profileData, error: profileError } = await supabase
-          .from('profiles')
-          .select('full_name')
-          .eq('id', user.id)
-          .single();
-
-        if (profileError && profileError.code !== 'PGRST116') { // PGRST116: row not found
-          console.error("Error fetching profile:", profileError.message);
-        }
-        setUserName(profileData?.full_name || user.user_metadata?.full_name || user.email?.split('@')[0] || "User");
-
-        const { data: adminData, error: adminError } = await supabase
-          .from('admins')
-          .select('id')
-          .eq('id', user.id)
-          .maybeSingle();
-
-        if (adminError) {
-          console.error("Error checking admin status:", adminError.message);
+      try {
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        
+        if (sessionError) {
+          console.error("Header: Error getting session:", sessionError.message);
+          setAuthUser(null);
+          setUserName(null);
           setIsAdminUser(false);
-        } else {
-          setIsAdminUser(!!adminData);
+          return;
         }
-      } else {
+        
+        const user = session?.user ?? null;
+        setAuthUser(user);
+
+        if (user) {
+          const { data: profileData, error: profileError } = await supabase
+            .from('profiles')
+            .select('full_name')
+            .eq('id', user.id)
+            .single();
+
+          if (profileError && profileError.code !== 'PGRST116') {
+            console.error("Header: Error fetching profile:", profileError.message);
+          }
+          setUserName(profileData?.full_name || user.user_metadata?.full_name || user.email?.split('@')[0] || "User");
+
+          const { data: adminData, error: adminError } = await supabase
+            .from('admins')
+            .select('id')
+            .eq('id', user.id)
+            .maybeSingle();
+
+          if (adminError) {
+            console.error("Header: Error checking admin status:", adminError.message);
+            setIsAdminUser(false);
+          } else {
+            setIsAdminUser(!!adminData);
+          }
+        } else {
+          setUserName(null);
+          setIsAdminUser(false);
+        }
+      } catch (e) {
+        console.error("Header: Unexpected error in getSessionAndUser:", e);
+        setAuthUser(null);
         setUserName(null);
         setIsAdminUser(false);
+      } finally {
+        setIsLoadingAuth(false);
       }
-      setIsLoadingAuth(false);
     };
 
     getSessionAndUser();
 
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
       setIsLoadingAuth(true);
-      const user = session?.user ?? null;
-      setAuthUser(user);
-      if (user) {
-         const { data: profileData, error: profileError } = await supabase
-          .from('profiles')
-          .select('full_name')
-          .eq('id', user.id)
-          .single();
-        
-        if (profileError && profileError.code !== 'PGRST116') {
-          console.error("Error fetching profile on auth change:", profileError.message);
-        }
-        setUserName(profileData?.full_name || user.user_metadata?.full_name || user.email?.split('@')[0] || "User");
-        
-        const { data: adminData, error: adminError } = await supabase
-          .from('admins')
-          .select('id')
-          .eq('id', user.id)
-          .maybeSingle();
-        
-        if (adminError) {
-          console.error("Error checking admin status on auth change:", adminError.message);
-          setIsAdminUser(false);
+      try {
+        const user = session?.user ?? null;
+        setAuthUser(user);
+        if (user) {
+           const { data: profileData, error: profileError } = await supabase
+            .from('profiles')
+            .select('full_name')
+            .eq('id', user.id)
+            .single();
+          
+          if (profileError && profileError.code !== 'PGRST116') {
+            console.error("Header: Error fetching profile on auth change:", profileError.message);
+          }
+          setUserName(profileData?.full_name || user.user_metadata?.full_name || user.email?.split('@')[0] || "User");
+          
+          const { data: adminData, error: adminError } = await supabase
+            .from('admins')
+            .select('id')
+            .eq('id', user.id)
+            .maybeSingle();
+          
+          if (adminError) {
+            console.error("Header: Error checking admin status on auth change:", adminError.message);
+            setIsAdminUser(false);
+          } else {
+            setIsAdminUser(!!adminData);
+          }
         } else {
-          setIsAdminUser(!!adminData);
+          setUserName(null);
+          setIsAdminUser(false);
         }
-      } else {
+      } catch (e) {
+        console.error("Header: Unexpected error in onAuthStateChange handler:", e);
+        setAuthUser(null);
         setUserName(null);
         setIsAdminUser(false);
+      } finally {
+        setIsLoadingAuth(false);
       }
-      setIsLoadingAuth(false);
     });
 
     return () => {
@@ -140,7 +158,7 @@ export function Header() {
   const closeMobileMenu = () => setIsMobileMenuOpen(false);
 
   const handleLogout = async () => {
-    setIsLoadingAuth(true);
+    setIsLoadingAuth(true); // Keep UI responsive during logout
     const { error } = await supabase.auth.signOut();
     closeMobileMenu();
     if (error) {
@@ -148,9 +166,10 @@ export function Header() {
     } else {
       toast({ title: "Logged Out", description: "You have been successfully logged out." });
     }
+    // Auth state will be updated by onAuthStateChange, which will also set isLoadingAuth to false.
     router.push('/login'); 
     router.refresh(); 
-    setIsLoadingAuth(false);
+    // No need to setIsLoadingAuth(false) here, onAuthStateChange will handle it.
   };
   
   const CartLinkPlaceholder = () => (
@@ -197,7 +216,7 @@ export function Header() {
         </nav>
 
         <div className="flex items-center space-x-2 sm:space-x-4">
-          {!isLoadingAuth ? (
+          {!isLoadingAuth ? ( // Use isLoadingAuth here for the cart icon as well
             <Link href="/cart">
               <Button variant="ghost" size="icon" aria-label="Shopping Cart" className="relative">
                 <ShoppingCart className="h-5 w-5" />
