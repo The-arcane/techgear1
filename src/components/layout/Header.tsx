@@ -2,7 +2,7 @@
 "use client";
 
 import Link from 'next/link';
-import { ShoppingCart, User, LogIn, Menu, PackageSearch, Zap } from 'lucide-react';
+import { ShoppingCart, User, LogIn, Menu, PackageSearch, Zap, LogOut } from 'lucide-react'; // Added LogOut
 import { Logo } from '@/components/shared/Logo';
 import { Button } from '@/components/ui/button';
 import { useCart } from '@/contexts/CartContext';
@@ -12,6 +12,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation'; // Import useRouter
 
 const navLinks = [
   { href: '/', label: 'Home' },
@@ -27,21 +28,37 @@ export function Header() {
   const { itemCount } = useCart();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isClient, setIsClient] = useState(false);
-
-  // Placeholder for auth state - currently hardcoded
-  const isAuthenticated = false; // Set to true to simulate logged-in user
-  const isAdmin = true; // Set to true to show Admin link
+  const [isAuthenticated, setIsAuthenticated] = useState(false); // General auth state
+  const [isAdminUser, setIsAdminUser] = useState(false); // Specific admin auth state
+  const router = useRouter();
 
   useEffect(() => {
     setIsClient(true);
+    // Check auth state from localStorage on mount
+    if (typeof window !== 'undefined') {
+      const adminStatus = localStorage.getItem('isAdmin') === 'true';
+      const userAuthStatus = localStorage.getItem('isAuthenticated') === 'true'; // Assuming a general auth flag
+      setIsAdminUser(adminStatus);
+      setIsAuthenticated(userAuthStatus || adminStatus); // User is authenticated if they are admin or generally logged in
+    }
   }, []);
 
   const closeMobileMenu = () => setIsMobileMenuOpen(false);
 
-  // Placeholder for the cart link area before client hydration
+  const handleLogout = () => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('isAdmin');
+      localStorage.removeItem('isAuthenticated'); // Clear general auth flag too
+    }
+    setIsAdminUser(false);
+    setIsAuthenticated(false);
+    closeMobileMenu();
+    router.push('/login'); // Redirect to login after logout
+  };
+  
   const CartLinkPlaceholder = () => (
-    <div className="flex items-center justify-center h-10 w-10"> {/* Matches Button size="icon" */}
-      <ShoppingCart className="h-5 w-5 text-muted-foreground/50" /> {/* Muted and non-interactive appearance */}
+    <div className="flex items-center justify-center h-10 w-10">
+      <ShoppingCart className="h-5 w-5 text-muted-foreground/50" />
     </div>
   );
 
@@ -60,7 +77,7 @@ export function Header() {
           ))}
         </nav>
 
-        <div className="flex items-center space-x-4">
+        <div className="flex items-center space-x-2 sm:space-x-4">
           {isClient ? (
             <Link href="/cart" passHref legacyBehavior={false}>
               <Button variant="ghost" size="icon" aria-label="Shopping Cart" asChild={false} className="relative">
@@ -77,20 +94,25 @@ export function Header() {
           )}
 
           <div className="hidden md:flex items-center space-x-2">
-            {isAuthenticated ? (
-              <Link href="/orders" passHref legacyBehavior>
-                <Button variant="ghost" size="icon" aria-label="My Account" asChild={false}>
-                  <User className="h-5 w-5" />
+            {isClient && isAuthenticated ? (
+              <>
+                <Link href="/orders" passHref legacyBehavior>
+                  <Button variant="ghost" size="icon" aria-label="My Account" asChild={false}>
+                    <User className="h-5 w-5" />
+                  </Button>
+                </Link>
+                <Button variant="ghost" size="sm" onClick={handleLogout}>
+                  <LogOut className="mr-2 h-4 w-4" /> Logout
                 </Button>
-              </Link>
-            ) : (
+              </>
+            ) : isClient ? (
               <Link href="/login" passHref legacyBehavior>
                 <Button variant="ghost" size="sm" asChild={false}>
                   <LogIn className="mr-2 h-4 w-4" /> Login
                 </Button>
               </Link>
-            )}
-            {isAdmin && (
+            ) : null }
+            {isClient && isAdminUser && (
                <Link href="/admin" passHref legacyBehavior={false}>
                 <Button variant="outline" size="sm" asChild={false}>
                   <PackageSearch className="mr-2 h-4 w-4" /> Admin
@@ -109,8 +131,10 @@ export function Header() {
               </SheetTrigger>
               <SheetContent side="right" className="w-[300px] sm:w-[400px] bg-background">
                 <div className="p-6">
-                  <Logo />
-                  <nav className="mt-8 flex flex-col space-y-4">
+                  <div className="mb-6">
+                    <Logo />
+                  </div>
+                  <nav className="flex flex-col space-y-4">
                     {navLinks.map(link => (
                       <Link key={`mobile-${link.href}`} href={link.href} passHref legacyBehavior>
                         <a onClick={closeMobileMenu} className="text-lg font-medium text-foreground hover:text-primary transition-colors">
@@ -119,26 +143,31 @@ export function Header() {
                       </Link>
                     ))}
                     <hr/>
-                    {isAuthenticated ? (
-                      <Link href="/orders" passHref legacyBehavior>
-                        <a onClick={closeMobileMenu} className="text-lg font-medium text-foreground hover:text-primary transition-colors">
-                          My Orders
-                        </a>
-                      </Link>
-                    ) : (
+                    {isClient && isAuthenticated ? (
+                      <>
+                        <Link href="/orders" passHref legacyBehavior>
+                          <a onClick={closeMobileMenu} className="text-lg font-medium text-foreground hover:text-primary transition-colors flex items-center">
+                           <User className="mr-2 h-5 w-5" /> My Orders
+                          </a>
+                        </Link>
+                        {isAdminUser && (
+                          <Link href="/admin" passHref legacyBehavior={false}>
+                            <a onClick={closeMobileMenu} className="text-lg font-medium text-foreground hover:text-primary transition-colors flex items-center">
+                              <PackageSearch className="mr-2 h-5 w-5" /> Admin Panel
+                            </a>
+                          </Link>
+                        )}
+                        <Button variant="outline" onClick={handleLogout} className="w-full justify-start text-lg py-6">
+                          <LogOut className="mr-2 h-5 w-5" /> Logout
+                        </Button>
+                      </>
+                    ) : isClient ? (
                       <Link href="/login" passHref legacyBehavior>
-                        <a onClick={closeMobileMenu} className="text-lg font-medium text-foreground hover:text-primary transition-colors">
-                          Login / Signup
-                        </a>
-                      </Link>
-                    )}
-                     {isAdmin && (
-                      <Link href="/admin" passHref legacyBehavior={false}>
                         <a onClick={closeMobileMenu} className="text-lg font-medium text-foreground hover:text-primary transition-colors flex items-center">
-                          <PackageSearch className="mr-2 h-5 w-5" /> Admin Panel
+                         <LogIn className="mr-2 h-5 w-5" /> Login / Signup
                         </a>
                       </Link>
-                    )}
+                    ) : null}
                   </nav>
                 </div>
               </SheetContent>
