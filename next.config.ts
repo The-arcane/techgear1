@@ -16,6 +16,16 @@ const nextConfig: NextConfig = {
         port: '',
         pathname: '/**',
       },
+      {
+        protocol: 'https',
+        hostname: 'i.postimg.cc',
+        port: '',
+        pathname: '/**',
+      },
+      { // Add this block for Supabase storage or your image host
+        protocol: 'https',
+        hostname: '[your-supabase-project-ref].supabase.co', // Replace with your actual hostname
+      },
     ],
   },
 };
