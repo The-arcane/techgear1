@@ -9,18 +9,20 @@ import Link from 'next/link';
 import { ChevronRight, CheckCircle, AlertTriangle } from 'lucide-react';
 import type { Metadata } from 'next';
 import type { Product } from '@/lib/types';
-import { Button } from '@/components/ui/button'; // Added Button import
+import { Button } from '@/components/ui/button';
 
 type ProductPageProps = {
   params: { id: string };
 };
 
 async function getProductById(productId: string): Promise<Product | null> {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+  let appUrl = process.env.NEXT_PUBLIC_APP_URL;
+  const defaultAppUrl = 'http://localhost:9002'; // Default fallback for local development
 
   if (!appUrl) {
-    throw new Error(
-      `Configuration Error: NEXT_PUBLIC_APP_URL environment variable is not set. 
+    console.warn(
+      `WARNING: The NEXT_PUBLIC_APP_URL environment variable is not set. 
+      Using default fallback: ${defaultAppUrl}.
       This is required for server-side API calls to function correctly (e.g., for product detail pages).
       Please create or update your .env.local file in the root of your project and add:
       NEXT_PUBLIC_APP_URL=http://localhost:9002 
@@ -28,6 +30,7 @@ async function getProductById(productId: string): Promise<Product | null> {
       Then, restart your development server.
       This is crucial for server-side API calls.`
     );
+    appUrl = defaultAppUrl;
   }
 
   const fetchUrl = `${appUrl}/api/products/${productId}`;
