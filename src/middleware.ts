@@ -4,11 +4,14 @@ import { NextResponse, type NextRequest } from 'next/server'
 
 export async function middleware(request: NextRequest) {
   console.log(`[Middleware] Running for path: ${request.nextUrl.pathname}`);
-  let response = NextResponse.next({
+  
+  // Create the response object once at the beginning.
+  // This will be mutated by the cookie handlers if Supabase needs to set/remove cookies.
+  const response = NextResponse.next({
     request: {
       headers: request.headers,
     },
-  })
+  });
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -16,59 +19,44 @@ export async function middleware(request: NextRequest) {
     {
       cookies: {
         get(name: string) {
-          return request.cookies.get(name)?.value
+          return request.cookies.get(name)?.value;
         },
         set(name: string, value: string, options: CookieOptions) {
-          request.cookies.set({
-            name,
-            value,
-            ...options,
-          })
-          response = NextResponse.next({ // Re-assign response if cookies are set
-            request: {
-              headers: request.headers,
-            },
-          })
+          // The `request` object's cookies are not mutated directly here,
+          // Supabase client relies on its internal state being updated by `set`.
+          // For the outgoing response, we set the cookie on our single `response` object.
           response.cookies.set({
             name,
             value,
             ...options,
-          })
+          });
         },
         remove(name: string, options: CookieOptions) {
-          request.cookies.set({
+          // Similar to `set`, we modify the `response` object's cookies.
+          response.cookies.set({ // Or response.cookies.delete(name, options)
             name,
             value: '',
             ...options,
-          })
-          response = NextResponse.next({ // Re-assign response if cookies are removed
-            request: {
-              headers: request.headers,
-            },
-          })
-          response.cookies.set({
-            name,
-            value: '',
-            ...options,
-          })
+          });
         },
       },
     }
-  )
+  );
 
-  // Attempt to refresh the session. This is the primary role of this middleware.
+  // Attempt to refresh the session.
+  // This will potentially call the `set` or `remove` handlers above if the session changes.
   const { data: { session }, error } = await supabase.auth.getSession();
 
   if (error) {
-    console.error('[Middleware] Error getting/refreshing session:', error.name, error.message);
+    console.error('[Middleware] Error getting/refreshing session. Name:', error.name, 'Message:', error.message);
   } else if (session) {
     console.log('[Middleware] Session successfully refreshed/retrieved. User ID:', session.user.id);
   } else {
     console.log('[Middleware] No active session found by getSession().');
   }
   
-  // The NextResponse.next() with potentially updated cookies (if set/removed by Supabase client) is returned.
-  return response
+  // Return the (potentially modified) response object.
+  return response;
 }
 
 export const config = {
