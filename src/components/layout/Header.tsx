@@ -3,7 +3,7 @@
 
 import React from 'react'; // Ensure React is imported first
 import Link from 'next/link';
-import { ShoppingCart, User, LogIn, Menu, PackageSearch, LogOut, X as CloseIcon, ChevronDown, ListOrdered, UserCircle as UserProfileIcon } from 'lucide-react';
+import { ShoppingCart, User, LogIn, Menu, PackageSearch, LogOut, X as CloseIcon, ChevronDown, ListOrdered, UserCircle as UserProfileIcon, Loader2 } from 'lucide-react';
 import { Logo } from '@/components/shared/Logo';
 import { Button } from '@/components/ui/button';
 import { useCart } from '@/contexts/CartContext';
@@ -50,115 +50,110 @@ export function Header() {
   const router = useRouter();
 
   useEffect(() => {
-    const getSessionAndUser = async () => {
-      setIsLoadingAuth(true);
+    console.log("Header: useEffect mounted. isLoadingAuth initially:", isLoadingAuth);
+
+    const fetchUserDetails = async (user: AuthUser) => {
+      try {
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
+          .select('full_name')
+          .eq('id', user.id)
+          .single();
+
+        if (profileError && profileError.code !== 'PGRST116') {
+          console.error("Header: Error fetching profile:", profileError.message);
+        }
+        setUserName(profileData?.full_name || user.user_metadata?.full_name || user.email?.split('@')[0] || "User");
+
+        const { data: adminData, error: adminError } = await supabase
+          .from('admins')
+          .select('id')
+          .eq('id', user.id)
+          .maybeSingle();
+
+        if (adminError) {
+          console.error("Header: Error checking admin status:", adminError.message);
+          setIsAdminUser(false);
+        } else {
+          setIsAdminUser(!!adminData);
+        }
+      } catch (e: any) {
+        console.error("Header: Unexpected error in fetchUserDetails:", e.message);
+        setUserName(user.email?.split('@')[0] || "User"); // Fallback
+        setIsAdminUser(false);
+      }
+    };
+    
+    const performInitialAuthSetup = async () => {
+      console.log("Header: Performing initial auth setup.");
       try {
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         
         if (sessionError) {
-          console.error("Header: Error getting session:", sessionError.message);
+          console.error("Header (initial getSession): Error getting session:", sessionError.message);
           setAuthUser(null);
           setUserName(null);
           setIsAdminUser(false);
-          return;
+          return; // Exit if session fetch fails
         }
         
         const user = session?.user ?? null;
         setAuthUser(user);
+        console.log("Header (initial getSession): User:", user ? user.id : "null");
 
         if (user) {
-          const { data: profileData, error: profileError } = await supabase
-            .from('profiles')
-            .select('full_name')
-            .eq('id', user.id)
-            .single();
-
-          if (profileError && profileError.code !== 'PGRST116') {
-            console.error("Header: Error fetching profile:", profileError.message);
-          }
-          setUserName(profileData?.full_name || user.user_metadata?.full_name || user.email?.split('@')[0] || "User");
-
-          const { data: adminData, error: adminError } = await supabase
-            .from('admins')
-            .select('id')
-            .eq('id', user.id)
-            .maybeSingle();
-
-          if (adminError) {
-            console.error("Header: Error checking admin status:", adminError.message);
-            setIsAdminUser(false);
-          } else {
-            setIsAdminUser(!!adminData);
-          }
+          await fetchUserDetails(user);
         } else {
           setUserName(null);
           setIsAdminUser(false);
         }
-      } catch (e) {
-        console.error("Header: Unexpected error in getSessionAndUser:", e);
+      } catch (e:any) {
+        console.error("Header (initial auth setup error):", e.message);
         setAuthUser(null);
         setUserName(null);
         setIsAdminUser(false);
       } finally {
+        console.log("Header: Initial auth setup finished. Setting isLoadingAuth to false.");
         setIsLoadingAuth(false);
       }
     };
 
-    getSessionAndUser();
+    performInitialAuthSetup();
 
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
-      setIsLoadingAuth(true);
+      console.log("Header: onAuthStateChange event:", event, "Session user:", session?.user?.id || "null");
+      // We don't toggle isLoadingAuth here anymore, initial load handles it.
+      // This listener just updates the auth state for subsequent changes.
       try {
         const user = session?.user ?? null;
         setAuthUser(user);
         if (user) {
-           const { data: profileData, error: profileError } = await supabase
-            .from('profiles')
-            .select('full_name')
-            .eq('id', user.id)
-            .single();
-          
-          if (profileError && profileError.code !== 'PGRST116') {
-            console.error("Header: Error fetching profile on auth change:", profileError.message);
-          }
-          setUserName(profileData?.full_name || user.user_metadata?.full_name || user.email?.split('@')[0] || "User");
-          
-          const { data: adminData, error: adminError } = await supabase
-            .from('admins')
-            .select('id')
-            .eq('id', user.id)
-            .maybeSingle();
-          
-          if (adminError) {
-            console.error("Header: Error checking admin status on auth change:", adminError.message);
-            setIsAdminUser(false);
-          } else {
-            setIsAdminUser(!!adminData);
-          }
+          await fetchUserDetails(user);
         } else {
           setUserName(null);
           setIsAdminUser(false);
         }
-      } catch (e) {
-        console.error("Header: Unexpected error in onAuthStateChange handler:", e);
+      } catch (e: any) {
+        console.error("Header (onAuthStateChange error):", e.message);
+        // Reset states on error within auth change
         setAuthUser(null);
         setUserName(null);
         setIsAdminUser(false);
-      } finally {
-        setIsLoadingAuth(false);
       }
     });
 
     return () => {
-      authListener.subscription.unsubscribe();
+      console.log("Header: useEffect cleanup. Unsubscribing auth listener.");
+      authListener?.subscription.unsubscribe();
     };
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty dependency array to run once on mount
 
 
   const closeMobileMenu = () => setIsMobileMenuOpen(false);
 
   const handleLogout = async () => {
-    setIsLoadingAuth(true); // Keep UI responsive during logout
+    // No need to set isLoadingAuth here as onAuthStateChange will handle state update
     const { error } = await supabase.auth.signOut();
     closeMobileMenu();
     if (error) {
@@ -166,10 +161,8 @@ export function Header() {
     } else {
       toast({ title: "Logged Out", description: "You have been successfully logged out." });
     }
-    // Auth state will be updated by onAuthStateChange, which will also set isLoadingAuth to false.
     router.push('/login'); 
     router.refresh(); 
-    // No need to setIsLoadingAuth(false) here, onAuthStateChange will handle it.
   };
   
   const CartLinkPlaceholder = () => (
@@ -216,7 +209,7 @@ export function Header() {
         </nav>
 
         <div className="flex items-center space-x-2 sm:space-x-4">
-          {!isLoadingAuth ? ( // Use isLoadingAuth here for the cart icon as well
+          {/* Cart icon doesn't depend on isLoadingAuth, itemCount should update independently */}
             <Link href="/cart">
               <Button variant="ghost" size="icon" aria-label="Shopping Cart" className="relative">
                 <ShoppingCart className="h-5 w-5" />
@@ -227,13 +220,12 @@ export function Header() {
                 )}
               </Button>
             </Link>
-          ) : (
-            <CartLinkPlaceholder />
-          )}
 
           <div className="hidden md:flex items-center space-x-2">
             {isLoadingAuth ? (
-              <Button variant="ghost" size="sm" disabled><LogIn className="mr-2 h-4 w-4" /> Loading...</Button>
+              <Button variant="ghost" size="sm" disabled className="flex items-center">
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading...
+              </Button>
             ) : authUser ? (
               <>
                 <DropdownMenu>
@@ -326,7 +318,9 @@ export function Header() {
                     <hr className="my-4"/>
 
                     {isLoadingAuth ? (
-                       <p className="py-2 text-lg font-medium text-muted-foreground flex items-center">Loading user...</p>
+                       <p className="py-2 text-lg font-medium text-muted-foreground flex items-center">
+                         <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Loading user...
+                       </p>
                     ): authUser ? (
                       <>
                         <p className="py-2 text-lg font-medium text-foreground flex items-center">
@@ -364,3 +358,4 @@ export function Header() {
     </header>
   );
 }
+
