@@ -16,12 +16,22 @@ export const metadata: Metadata = {
 
 export default async function ProfilePage() {
   const supabase = createServerComponentClient({ cookies });
-  const { data: { user } } = await supabase.auth.getUser();
+
+  console.log('[ProfilePage] Attempting to get user session...');
+  const { data: { user }, error: authUserError } = await supabase.auth.getUser();
+
+  if (authUserError) {
+    console.error('[ProfilePage] Error getting user session:', JSON.stringify(authUserError, null, 2));
+    // Potentially redirect or show an error, but if user is null, the next block handles redirect.
+  }
+  console.log('[ProfilePage] User object from supabase.auth.getUser():', JSON.stringify(user, null, 2));
 
   if (!user) {
+    console.log('[ProfilePage] No user found, redirecting to login.');
     redirect('/login?message=Please login to view your profile.');
   }
 
+  console.log(`[ProfilePage] User authenticated: ${user.id}. Fetching profile...`);
   const { data: profile, error: profileError } = await supabase
     .from('profiles')
     .select('*')
@@ -29,7 +39,7 @@ export default async function ProfilePage() {
     .single<SupabaseProfile>();
 
   if (profileError && profileError.code !== 'PGRST116') { // PGRST116 means no rows found
-    console.error("Error fetching profile:", profileError);
+    console.error("[ProfilePage] Error fetching profile:", JSON.stringify(profileError, null, 2));
     return (
       <div className="text-center py-12">
         <AlertTriangle className="mx-auto h-12 w-12 text-destructive mb-4" />
@@ -41,18 +51,18 @@ export default async function ProfilePage() {
   }
   
   if (!profile) {
+    console.warn(`[ProfilePage] Profile not found for user ID: ${user.id}. This usually means the profile was not created after signup.`);
     return (
       <div className="text-center py-12">
         <UserCircle className="mx-auto h-16 w-16 text-muted-foreground mb-4" />
         <h1 className="text-3xl font-bold mb-2">Profile Not Found</h1>
         <p className="text-muted-foreground mb-6">
           We couldn't find a profile associated with your account. 
-          This might happen if your account setup wasn't fully completed.
+          This might happen if your account setup wasn't fully completed (e.g., database trigger for profile creation failed).
         </p>
         <Link href="/">
             <Button variant="outline">Back to Home</Button>
         </Link>
-         {/* Consider adding a button to "Complete Profile" or contact support if this state is common */}
       </div>
     );
   }
@@ -65,11 +75,6 @@ export default async function ProfilePage() {
           <CardTitle className="text-2xl font-semibold">
             {profile.full_name || 'Your Name'}
           </CardTitle>
-          {/* <Link href="/profile/edit">
-            <Button variant="outline" size="sm">
-              <Edit3 className="mr-2 h-4 w-4" /> Edit Profile
-            </Button>
-          </Link> */}
         </CardHeader>
         <CardContent className="space-y-6 pt-4">
           <div className="flex items-center">
@@ -83,7 +88,7 @@ export default async function ProfilePage() {
             <Mail className="mr-3 h-6 w-6 text-primary" />
             <div>
               <p className="text-sm text-muted-foreground">Email Address</p>
-              <p className="font-medium">{user.email}</p> {/* Email from auth.users */}
+              <p className="font-medium">{user.email}</p> 
             </div>
           </div>
           <div className="flex items-center">
@@ -105,7 +110,6 @@ export default async function ProfilePage() {
             <p className="text-xs text-muted-foreground">
                 Profile data is managed via Supabase. For changes, future "Edit Profile" functionality will interact with the 'profiles' table.
             </p>
-            {/* Placeholder for Edit Profile button */}
             <Button variant="secondary" className="mt-4" disabled>
               <Edit3 className="mr-2 h-4 w-4" /> Edit Profile (Coming Soon)
             </Button>
@@ -115,4 +119,3 @@ export default async function ProfilePage() {
     </div>
   );
 }
-

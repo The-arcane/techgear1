@@ -33,12 +33,12 @@ export function LoginForm() {
       toast({ title: "Login Failed", description: error.message, variant: "destructive" });
     } else if (data.user && data.session) {
       toast({ title: "Login Successful", description: "Welcome back!" });
-      // Supabase client automatically handles session persistence (e.g., in localStorage)
-      // The Header component will react to auth state changes.
-      router.push('/'); 
-      router.refresh(); // Useful to ensure server components re-fetch data if auth state changes visibility
+      console.log("Login successful in LoginForm. User ID:", data.user.id, "Session:", !!data.session, "Navigating to / and refreshing.");
+      router.push('/');
+      router.refresh();
     } else {
-      toast({ title: "Login Failed", description: "Invalid email or password.", variant: "destructive" });
+      // This case might occur if Supabase returns no error but also no user/session, which is unusual for signInWithPassword
+      toast({ title: "Login Failed", description: "Invalid email or password, or an unexpected issue occurred.", variant: "destructive" });
     }
   };
 

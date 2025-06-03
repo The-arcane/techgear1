@@ -18,30 +18,20 @@ export const metadata: Metadata = {
 export default async function OrdersPage() {
   const supabase = createServerComponentClient({ cookies });
 
+  console.log('[OrdersPage] Attempting to get user session...');
   const { data: { user }, error: authError } = await supabase.auth.getUser();
+  
+  console.log('[OrdersPage] User object from supabase.auth.getUser():', JSON.stringify(user, null, 2));
+  if (authError) {
+    console.error('[OrdersPage] Error getting user session:', JSON.stringify(authError, null, 2));
+  }
 
   if (authError || !user) {
-    console.error('Auth error or no user found in OrdersPage:', authError);
-    // It's better to redirect to login if user is not found.
-    // The UI below handles !user, but redirect is cleaner for RSC.
+    console.log('[OrdersPage] Auth error or no user found, redirecting to login. AuthError:', !!authError, 'User:', !!user);
     redirect('/login?message=Please login to view your orders.');
   }
   
-  // This section will only run if user is available from the redirect above.
-  // For safety, we can add an explicit check again here.
-  if (!user) {
-     return ( // Fallback, should ideally be caught by redirect
-      <div className="text-center py-12">
-        <AlertTriangle className="mx-auto h-12 w-12 text-destructive mb-4" />
-        <h1 className="text-3xl font-bold mb-4">Authentication Required</h1>
-        <p className="text-muted-foreground">You need to be logged in to view your orders.</p>
-        <Link href="/login" className="mt-6 inline-block">
-          <Button>Login</Button>
-        </Link>
-      </div>
-    );
-  }
-
+  console.log(`[OrdersPage] User authenticated: ${user.id}. Fetching orders...`);
   const { data: ordersData, error: ordersFetchError } = await supabase
     .from('orders')
     .select('*')
@@ -49,7 +39,7 @@ export default async function OrdersPage() {
     .order('created_at', { ascending: false });
 
   if (ordersFetchError) {
-    console.error("Error fetching orders from Supabase:", ordersFetchError);
+    console.error("[OrdersPage] Error fetching orders from Supabase:", JSON.stringify(ordersFetchError, null, 2));
     return (
       <div className="text-center py-12">
         <AlertTriangle className="mx-auto h-12 w-12 text-destructive mb-4" />
@@ -61,16 +51,16 @@ export default async function OrdersPage() {
   }
   
   const orders: Order[] = ordersData?.map((dbOrder: SupabaseOrderFetched) => ({
-    id: dbOrder.id.toString(), // Use DB id as string for app Order type
+    id: dbOrder.id.toString(),
     db_id: dbOrder.id,
-    userId: dbOrder.user_id || '', // Should always be present if fetched with eq('user_id', user.id)
-    userEmail: dbOrder.user_email,
-    items: [], // For the list view, we don't need full item details here.
+    userId: dbOrder.user_id || '', 
+    userEmail: dbOrder.user_email, // Ensure this matches your type if changed
+    items: [], 
     totalAmount: dbOrder.total_amount,
     status: dbOrder.status as OrderStatus || 'Pending',
     orderDate: dbOrder.created_at,
-    shippingAddress: dbOrder.shipping_address, // Assuming this is compatible
-    paymentMethod: (dbOrder.payment_mode as 'COD') || 'COD', // Assuming only COD for now
+    shippingAddress: dbOrder.shipping_address, 
+    paymentMethod: (dbOrder.payment_mode as 'COD') || 'COD',
   })) || [];
 
 
