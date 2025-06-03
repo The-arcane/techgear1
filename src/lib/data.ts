@@ -1,5 +1,5 @@
 
-import type { Category, Product, Order, OrderStatus, CartItem } from './types';
+import type { Category, Product, Order, OrderStatus, CartItem, ShippingAddress } from './types';
 
 export const categories: Category[] = [
   {
@@ -39,10 +39,9 @@ export const categories: Category[] = [
   },
 ];
 
-// Products are still mock, but orders will come from Supabase
 export let products: Product[] = [
   {
-    id: '1', // Assuming integer IDs now for consistency with DB for new products
+    id: '1',
     name: 'Logitech MX Master 3 Mouse',
     description: 'Ergonomic wireless mouse with ultrafast scrolling and customizable buttons for productivity.',
     categorySlug: 'mice',
@@ -143,10 +142,58 @@ export let products: Product[] = [
   }
 ];
 
-// Mock data for orders is no longer the primary source for user-facing order history.
-// These can be removed or kept for admin panel if it still uses them.
-// For this change, I will remove them to avoid confusion.
-// export let orders: Order[] = []; // Orders will now be fetched from Supabase.
+// Mock shipping address for sample orders
+const mockShippingAddress: ShippingAddress = {
+  fullName: "Mock User",
+  address: "123 Mock Street",
+  city: "Mockville",
+  postalCode: "00000",
+  country: "Mockland"
+};
+
+// Mock orders for admin panel overview
+export let orders: Order[] = [
+  {
+    id: 'order101',
+    userId: 'mock-user-1',
+    userEmail: 'user1@example.com',
+    items: [
+      { productId: '1', name: 'Logitech MX Master 3 Mouse', price: 7999, quantity: 1, image: products[0].images[0], stock: products[0].stock },
+    ],
+    totalAmount: 7999,
+    status: 'Delivered',
+    orderDate: new Date(Date.now() - 86400000 * 5).toISOString(), // 5 days ago
+    shippingAddress: mockShippingAddress,
+    paymentMethod: 'COD',
+  },
+  {
+    id: 'order102',
+    userId: 'mock-user-2',
+    userEmail: 'user2@example.com',
+    items: [
+      { productId: '3', name: 'Anker USB-C Charger', price: 1299, quantity: 2, image: products[2].images[0], stock: products[2].stock },
+      { productId: '4', name: 'Samsung Galaxy Buds Pro', price: 11499, quantity: 1, image: products[3].images[0], stock: products[3].stock },
+    ],
+    totalAmount: (1299*2) + 11499,
+    status: 'Pending',
+    orderDate: new Date(Date.now() - 86400000 * 2).toISOString(), // 2 days ago
+    shippingAddress: mockShippingAddress,
+    paymentMethod: 'COD',
+  },
+  {
+    id: 'order103',
+    userId: 'mock-user-1',
+    userEmail: 'user1@example.com',
+    items: [
+      { productId: '2', name: 'Apple Magic Keyboard', price: 9500, quantity: 1, image: products[1].images[0], stock: products[1].stock },
+    ],
+    totalAmount: 9500,
+    status: 'Shipped',
+    orderDate: new Date(Date.now() - 86400000 * 3).toISOString(), // 3 days ago
+    shippingAddress: mockShippingAddress,
+    paymentMethod: 'COD',
+  },
+];
 
 
 export const getProductsByCategory = (categorySlug: string): Product[] => {
@@ -154,8 +201,6 @@ export const getProductsByCategory = (categorySlug: string): Product[] => {
 };
 
 export const getProductById = (productId: string): Product | undefined => {
-  // This might still be used by product detail page if it's not fetching from Supabase yet.
-  // Or if cart needs to look up product details from mock data.
   return products.find(product => product.id === productId);
 };
 
@@ -163,16 +208,25 @@ export const getCategoryBySlug = (slug: string): Category | undefined => {
   return categories.find(category => category.slug === slug);
 };
 
-// --- Removed Mock Order Functions ---
-// export const getAllOrders = (): Order[] => { ... };
-// export const getUserOrders = (userId: string): Order[] => { ... };
-// export const getOrderById = (orderId: string): Order | undefined => { ... };
-// export const updateOrderStatus = (orderId: string, status: OrderStatus): boolean => { ... };
-// export const addOrder = (newOrder: Order): void => { ... };
+// Reinstated mock function for admin panel
+export const getAllOrders = (): Order[] => {
+  return orders;
+};
 
-// Mock product stock update, might still be used if cart/checkout doesn't fully use Supabase products yet.
-// Or can be removed if checkout fully updates Supabase product stock.
-// For now, keeping it as an example, but it's not tied to Supabase.
+export const getOrderById = (orderId: string): Order | undefined => {
+  return orders.find(order => order.id === orderId);
+};
+
+export const updateOrderStatus = (orderId: string, status: OrderStatus): boolean => {
+  const orderIndex = orders.findIndex(o => o.id === orderId);
+  if (orderIndex !== -1) {
+    orders[orderIndex].status = status;
+    return true;
+  }
+  return false;
+};
+
+
 export const updateMockProductStock = (productId: string, quantitySold: number): boolean => {
   const productIndex = products.findIndex(p => p.id === productId);
   if (productIndex !== -1) {
@@ -188,4 +242,9 @@ export const updateMockProductStock = (productId: string, quantitySold: number):
   }
   console.warn(`Mock: Product ${productId} not found for stock update.`);
   return false;
+};
+
+// Placeholder for adding an order if needed by admin mocks, not tied to Supabase
+export const addOrder = (newOrder: Order): void => {
+  orders.unshift(newOrder); // Add to the beginning of the array
 };
