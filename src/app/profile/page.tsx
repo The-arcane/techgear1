@@ -15,7 +15,10 @@ export const metadata: Metadata = {
 };
 
 export default async function ProfilePage() {
-  const supabase = createServerComponentClient({ cookies });
+  const cookieStore = cookies();
+  console.log('[ProfilePage] All cookies visible to server component:', JSON.stringify(cookieStore.getAll(), null, 2));
+
+  const supabase = createServerComponentClient({ cookies: () => cookieStore });
 
   console.log('[ProfilePage] Attempting to get user session...');
   const { data: { user }, error: authUserError } = await supabase.auth.getUser();
@@ -56,6 +59,7 @@ export default async function ProfilePage() {
   
   if (!profile) {
     console.warn(`[ProfilePage] Profile not found for user ID: ${user.id}. This usually means the profile was not created after signup.`);
+    // This could also be a point where we redirect to a "complete profile" page if desired
     return (
       <div className="text-center py-12">
         <UserCircle className="mx-auto h-16 w-16 text-muted-foreground mb-4" />

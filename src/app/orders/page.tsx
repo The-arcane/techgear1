@@ -16,7 +16,10 @@ export const metadata: Metadata = {
 };
 
 export default async function OrdersPage() {
-  const supabase = createServerComponentClient({ cookies });
+  const cookieStore = cookies();
+  console.log('[OrdersPage] All cookies visible to server component:', JSON.stringify(cookieStore.getAll(), null, 2));
+  
+  const supabase = createServerComponentClient({ cookies: () => cookieStore });
 
   console.log('[OrdersPage] Attempting to get user session...');
   const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -59,7 +62,7 @@ export default async function OrdersPage() {
     id: dbOrder.id.toString(),
     db_id: dbOrder.id,
     userId: dbOrder.user_id || '', 
-    userEmail: dbOrder.user_email,
+    userEmail: dbOrder.user_email, // This now matches the schema
     items: [], 
     totalAmount: dbOrder.total_amount,
     status: dbOrder.status as OrderStatus || 'Pending',
