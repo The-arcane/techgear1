@@ -15,10 +15,18 @@ type ProductPageProps = {
   params: { id: string };
 };
 
-async function getProductById(productId: string): Promise<Product | null> {
+interface GetProductResult {
+  product: Product | null;
+  errorType?: 'env_var_missing' | 'fetch_failed' | 'not_found' | 'api_error';
+  errorMessage?: string;
+  debugFetchUrl?: string;
+}
+
+async function getProductById(productId: string): Promise<GetProductResult> {
   let appUrl = process.env.NEXT_PUBLIC_APP_URL;
   const defaultAppUrl = 'http://localhost:9002'; // Default fallback for local development
   let usingFallbackUrl = false;
+  let errorType: GetProductResult['errorType'] = undefined;
 
   if (!appUrl) {
     console.warn(
@@ -29,6 +37,7 @@ async function getProductById(productId: string): Promise<Product | null> {
     );
     appUrl = defaultAppUrl;
     usingFallbackUrl = true;
+    errorType = 'env_var_missing'; // Set error type if env var is missing
   }
 
   const fetchUrl = `${appUrl}/api/products/${productId}`;
@@ -37,30 +46,40 @@ async function getProductById(productId: string): Promise<Product | null> {
   try {
     const res = await fetch(fetchUrl, { cache: 'no-store' }); // Fetch fresh data
     if (!res.ok) {
+      const responseText = await res.text().catch(() => 'Could not read response text');
       if (res.status === 404) {
-        console.log(`(getProductById) Product ${productId} not found at ${fetchUrl} (404).`);
-        return null;
+        console.log(`(getProductById) Product ${productId} not found at ${fetchUrl} (404). Response: ${responseText}`);
+        return { product: null, errorType: 'not_found', errorMessage: `API returned 404: ${responseText}`, debugFetchUrl: fetchUrl };
       }
-      console.error(`(getProductById) Failed to fetch product ${productId} from ${fetchUrl}: ${res.status} ${res.statusText}. Response: ${await res.text().catch(() => 'Could not read response text')}`);
-      return null;
+      console.error(`(getProductById) Failed to fetch product ${productId} from ${fetchUrl}: ${res.status} ${res.statusText}. Response: ${responseText}`);
+      // If env_var_missing was the initial reason for fallback, keep that error type
+      return { product: null, errorType: errorType || 'api_error', errorMessage: `API Error ${res.status}: ${res.statusText}. Details: ${responseText}`, debugFetchUrl: fetchUrl };
     }
     const data = await res.json();
     console.log(`(getProductById) Successfully fetched product ${productId}.`);
-    return data.product;
+     if (!data.product && data.message) { // Handle cases where API returns success but product is null with a message
+        return { product: null, errorType: 'not_found', errorMessage: data.message, debugFetchUrl: fetchUrl };
+    }
+    return { product: data.product, debugFetchUrl: fetchUrl };
   } catch (error: any) {
     console.error(`(getProductById) Error fetching product ${productId} from ${fetchUrl}:`, error.message, error.stack);
-    if (usingFallbackUrl && error.message.includes('fetch failed')) {
-      console.error(`(getProductById) FETCH FAILED using fallback URL. This strongly indicates NEXT_PUBLIC_APP_URL is missing or incorrect on your deployment platform.`);
+    // If env_var_missing was already set, prioritize it.
+    if (errorType === 'env_var_missing') {
+        // The fetch likely failed because localhost was used.
     } else if (error.message.includes('fetch failed')) {
       console.error(`(getProductById) FETCH FAILED. Check network connectivity from server to ${fetchUrl} or if the URL is correct and accessible.`);
+      errorType = 'fetch_failed';
+    } else {
+        errorType = 'fetch_failed'; // Generic fetch error
     }
-    return null;
+    return { product: null, errorType, errorMessage: error.message, debugFetchUrl: fetchUrl };
   }
 }
 
 
 export async function generateMetadata({ params }: ProductPageProps): Promise<Metadata> {
-  const product = await getProductById(params.id);
+  const result = await getProductById(params.id);
+  const product = result.product;
   if (!product) {
     return {
       title: 'Product Not Found | TechGear',
@@ -80,16 +99,44 @@ export async function generateMetadata({ params }: ProductPageProps): Promise<Me
 
 export default async function ProductPage({ params }: ProductPageProps) {
   const { id } = params;
-  const product = await getProductById(id);
+  const result = await getProductById(id);
+  const product = result.product;
 
   if (!product) {
+    let title = "Product Not Found";
+    let userMessage = `The product you are looking for (ID: ${id}) does not exist or could not be loaded.`;
+    let details: string | undefined = result.debugFetchUrl ? `Attempted to fetch from: ${result.debugFetchUrl}` : undefined;
+
+    if (result.errorType === 'env_var_missing') {
+      title = "Configuration Error";
+      userMessage = `The application's public URL (NEXT_PUBLIC_APP_URL) is not set correctly on the server, so product (ID: ${id}) cannot be loaded.`;
+      details = `Please ensure the NEXT_PUBLIC_APP_URL environment variable is set in your deployment settings. Fallback URL used: ${result.debugFetchUrl}. Error: ${result.errorMessage || 'Fetch failed due to missing env var.'}`;
+    } else if (result.errorType === 'fetch_failed') {
+      title = "Network Error";
+      userMessage = `Could not fetch product details (ID: ${id}) from the server API. This might be due to a misconfigured server URL or network issues.`;
+      details = `Fetch URL: ${result.debugFetchUrl}. Error: ${result.errorMessage || 'Fetch operation failed.'}`;
+    } else if (result.errorType === 'not_found') {
+        userMessage = result.errorMessage || `Product with ID ${id} was not found by the API.`;
+        details = `Fetch URL: ${result.debugFetchUrl}. Note: API reported 'not found'.`;
+    } else if (result.errorType === 'api_error') {
+        title = "API Error";
+        userMessage = `There was an error retrieving product (ID: ${id}) from the API.`;
+        details = `Fetch URL: ${result.debugFetchUrl}. Error: ${result.errorMessage || 'API returned an error.'}`;
+    }
+
+
     return (
       <div className="text-center py-12">
         <AlertTriangle className="mx-auto h-12 w-12 text-destructive mb-4" />
-        <h1 className="text-3xl font-bold mb-2">Product Not Found</h1>
-        <p className="text-muted-foreground mb-6">
-          The product you are looking for (ID: {id}) does not exist, may have been removed, or there was an issue fetching it.
+        <h1 className="text-3xl font-bold mb-2">{title}</h1>
+        <p className="text-muted-foreground mb-4 max-w-xl mx-auto">
+          {userMessage}
         </p>
+        {details && (
+          <p className="text-xs text-muted-foreground/70 bg-muted p-2 rounded-md inline-block mb-6">
+            Debug Info: {details}
+          </p>
+        )}
         <Link href="/" className="mt-6 inline-block">
            <Button variant="outline">
             Back to Home
