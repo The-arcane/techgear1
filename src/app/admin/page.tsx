@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useState } from 'react';
@@ -196,7 +195,7 @@ export default function AdminPage() {
              Category Management
             </CardTitle>
             <CardDescription>Add, edit, or delete categories.</CardDescription>
-          </Header>
+          </CardHeader>
           <CardContent>
             <Link href="/admin/categories">
               <Button className="w-full">Manage Categories</Button>
@@ -211,7 +210,7 @@ export default function AdminPage() {
               Store Settings
             </CardTitle>
             <CardDescription>Configure store preferences.</CardDescription>
-          </Header>
+          </CardHeader>
           <CardContent>
             <Link href="/admin/settings">
               <Button className="w-full">Configure Settings</Button>
