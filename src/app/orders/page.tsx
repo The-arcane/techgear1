@@ -19,14 +19,40 @@ export const metadata: Metadata = {
 export default async function OrdersPage() {
   const cookieStore = cookies();
   console.log('[OrdersPage] All cookies visible to server component:', JSON.stringify(cookieStore.getAll(), null, 2));
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  console.log(`[OrdersPage] SUPABASE_URL: ${supabaseUrl}`);
+  console.log(`[OrdersPage] SUPABASE_ANON_KEY: ${supabaseAnonKey ? 'Defined' : 'NOT DEFINED'}`);
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    console.error("[OrdersPage] Supabase URL or Anon Key is missing from environment variables on the server.");
+    // This is a critical configuration error.
+    // You might want to throw an error or redirect to an error page.
+    // For now, logging and attempting to proceed (which will likely fail auth).
+    return (
+        <div className="text-center py-12">
+            <AlertTriangle className="mx-auto h-12 w-12 text-destructive mb-4" />
+            <h1 className="text-2xl font-semibold text-destructive">Server Configuration Error</h1>
+            <p className="text-muted-foreground mt-2">The application is not configured correctly. Please contact support.</p>
+        </div>
+    );
+  }
   
   const supabase = createServerClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    supabaseUrl,
+    supabaseAnonKey,
     {
       cookies: {
         get(name: string) {
           return cookieStore.get(name)?.value
+        },
+        set(name: string, value: string, options: CookieOptions) {
+          cookieStore.set({ name, value, ...options })
+        },
+        remove(name: string, options: CookieOptions) {
+          cookieStore.set({ name, value: '', ...options })
         },
       },
     }

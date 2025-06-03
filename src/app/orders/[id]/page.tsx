@@ -16,22 +16,10 @@ type UserOrderDetailPageProps = {
   params: { id: string }; 
 };
 
-async function getOrderDetailsFromSupabase(orderIdNum: number, userId: string): Promise<Order | null> {
-  const cookieStore = cookies();
-  const supabase = createServerClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value
-        },
-      },
-    }
-  );
+async function getOrderDetailsFromSupabase(orderIdNum: number, userId: string, supabaseClient: ReturnType<typeof createServerClient<Database>>): Promise<Order | null> {
   console.log(`[getOrderDetailsFromSupabase] Fetching order ID: ${orderIdNum} for user ID: ${userId}`);
 
-  const { data: orderData, error: orderError } = await supabase
+  const { data: orderData, error: orderError } = await supabaseClient
     .from('orders')
     .select<string, SupabaseOrderFetched>(`
       id,
@@ -53,7 +41,7 @@ async function getOrderDetailsFromSupabase(orderIdNum: number, userId: string): 
   }
   console.log(`[getOrderDetailsFromSupabase] Fetched order data for order ID ${orderIdNum}:`, JSON.stringify(orderData, null, 2));
 
-  const { data: orderItemsData, error: itemsError } = await supabase
+  const { data: orderItemsData, error: itemsError } = await supabaseClient
     .from('order_items')
     .select<string, SupabaseOrderItemWithProduct>(`
       quantity,
@@ -94,17 +82,20 @@ async function getOrderDetailsFromSupabase(orderIdNum: number, userId: string): 
 
 export async function generateMetadata({ params }: UserOrderDetailPageProps): Promise<Metadata> {
   const cookieStore = cookies();
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+  
+  // Create a temporary Supabase client for metadata generation
   const supabase = createServerClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    supabaseUrl,
+    supabaseAnonKey,
     {
       cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value
-        },
+        get(name: string) { return cookieStore.get(name)?.value },
       },
     }
   );
+
   const { data: { user } } = await supabase.auth.getUser();
   console.log(`[generateMetadata /orders/${params.id}] User for metadata:`, user ? user.id : 'No user');
   
@@ -136,13 +127,36 @@ export default async function UserOrderDetailPage({ params }: UserOrderDetailPag
   const cookieStore = cookies(); 
   console.log(`[UserOrderDetailPage /orders/${params.id}] All cookies visible to server component:`, JSON.stringify(cookieStore.getAll(), null, 2));
   
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  console.log(`[UserOrderDetailPage /orders/${params.id}] SUPABASE_URL: ${supabaseUrl}`);
+  console.log(`[UserOrderDetailPage /orders/${params.id}] SUPABASE_ANON_KEY: ${supabaseAnonKey ? 'Defined' : 'NOT DEFINED'}`);
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    console.error("[UserOrderDetailPage] Supabase URL or Anon Key is missing from environment variables on the server.");
+    return (
+        <div className="text-center py-12">
+            <AlertTriangle className="mx-auto h-12 w-12 text-destructive mb-4" />
+            <h1 className="text-2xl font-semibold text-destructive">Server Configuration Error</h1>
+            <p className="text-muted-foreground mt-2">The application is not configured correctly. Please contact support.</p>
+        </div>
+    );
+  }
+
   const supabase = createServerClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    supabaseUrl,
+    supabaseAnonKey,
     {
       cookies: {
         get(name: string) {
           return cookieStore.get(name)?.value
+        },
+        set(name: string, value: string, options: CookieOptions) {
+          cookieStore.set({ name, value, ...options })
+        },
+        remove(name: string, options: CookieOptions) {
+          cookieStore.set({ name, value: '', ...options })
         },
       },
     }
@@ -184,7 +198,7 @@ export default async function UserOrderDetailPage({ params }: UserOrderDetailPag
     );
   }
 
-  const order = await getOrderDetailsFromSupabase(orderIdNum, user.id);
+  const order = await getOrderDetailsFromSupabase(orderIdNum, user.id, supabase);
 
   if (!order) {
     console.log(`[UserOrderDetailPage /orders/${params.id}] Order not found for ID ${orderIdNum} and user ${user.id}.`);
