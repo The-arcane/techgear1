@@ -6,72 +6,88 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { getAllOrders as fetchAllOrders, updateOrderStatus as mockUpdateStatus, getOrderById as fetchOrderById } from "@/lib/data";
 import type { Order, OrderStatus } from "@/lib/types";
-import { Eye, Edit, CheckCircle, XCircle, Loader2 } from "lucide-react";
+import { Eye, CheckCircle, XCircle, Loader2, AlertTriangle, PackageSearch } from "lucide-react";
 import Link from "next/link";
 import { useToast } from "@/hooks/use-toast";
-import type { Metadata } from 'next';
+import { useRouter } from 'next/navigation'; // Added for potential future use
 
-// Metadata can't be dynamic in client components directly this way
-// export const metadata: Metadata = { 
-//   title: 'Manage Orders | Admin Panel | TechGear',
-//   description: 'View and manage customer orders in the TechGear store.',
-// };
-
-// Basic role check placeholder
-const isAdmin = true; 
+// Basic role check placeholder - can be removed if API handles auth fully
+// const isAdmin = true; 
 
 export default function AdminOrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [updatingStatus, setUpdatingStatus] = useState<Record<string, boolean>>({});
   const { toast } = useToast();
+  const router = useRouter(); // For potential programmatic navigation
+
+  async function fetchOrders() {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const response = await fetch('/api/admin/orders');
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `Failed to fetch orders: ${response.statusText}`);
+      }
+      const data = await response.json();
+      if (data.success) {
+        setOrders(data.orders || []);
+      } else {
+        throw new Error(data.message || "Failed to fetch orders");
+      }
+    } catch (err) {
+      console.error("Error fetching orders:", err);
+      setError(err instanceof Error ? err.message : "An unknown error occurred");
+      setOrders([]); // Clear orders on error
+    } finally {
+      setIsLoading(false);
+    }
+  }
 
   useEffect(() => {
-    // Simulate fetching data
-    const loadOrders = async () => {
-      setIsLoading(true);
-      await new Promise(resolve => setTimeout(resolve, 500)); // Simulate delay
-      const fetchedOrders = fetchAllOrders();
-      setOrders(fetchedOrders);
-      setIsLoading(false);
-    };
-    loadOrders();
+    fetchOrders();
   }, []);
 
   const handleStatusChange = async (orderId: string, newStatus: OrderStatus) => {
     setUpdatingStatus(prev => ({ ...prev, [orderId]: true }));
     
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 700));
-    const success = mockUpdateStatus(orderId, newStatus); // Use mock update function
+    try {
+      const response = await fetch(`/api/admin/orders/${orderId}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      const result = await response.json();
 
-    if (success) {
-      // Re-fetch or update local state
-      const updatedOrder = fetchOrderById(orderId);
-      if (updatedOrder) {
-        setOrders(prevOrders => prevOrders.map(o => o.id === orderId ? updatedOrder : o));
+      if (response.ok && result.success) {
+        setOrders(prevOrders => 
+          prevOrders.map(o => (o.id === orderId ? { ...o, status: newStatus } : o))
+        );
+        toast({ title: "Status Updated", description: `Order ${orderId} status changed to ${newStatus}.` });
+      } else {
+        toast({ title: "Update Failed", description: result.message || `Could not update status for order ${orderId}.`, variant: "destructive" });
       }
-      toast({ title: "Status Updated", description: `Order ${orderId} status changed to ${newStatus}.` });
-    } else {
-      toast({ title: "Update Failed", description: `Could not update status for order ${orderId}.`, variant: "destructive" });
+    } catch (err) {
+      toast({ title: "Network Error", description: "Could not connect to the server to update status.", variant: "destructive" });
+      console.error("Error updating order status:", err);
+    } finally {
+      setUpdatingStatus(prev => ({ ...prev, [orderId]: false }));
     }
-    setUpdatingStatus(prev => ({ ...prev, [orderId]: false }));
   };
 
-  if (!isAdmin) {
-     return (
-      <div className="text-center py-12">
-        <h1 className="text-3xl font-bold text-destructive mb-4">Access Denied</h1>
-        <Link href="/admin"><Button>Back to Admin Panel</Button></Link>
-      </div>
-    );
-  }
-
-  if (isLoading) {
-    return <div className="text-center py-10"><Loader2 className="h-8 w-8 animate-spin mx-auto mb-2"/>Loading orders...</div>;
-  }
+  // This direct client-side isAdmin check is less secure and typically handled by API protection & page effects
+  // For now, we rely on API to enforce admin access.
+  // if (!isAdmin) {
+  //    return (
+  //     <div className="text-center py-12">
+  //       <h1 className="text-3xl font-bold text-destructive mb-4">Access Denied</h1>
+  //       <Link href="/admin"><Button>Back to Admin Panel</Button></Link>
+  //     </div>
+  //   );
+  // }
   
   const orderStatuses: OrderStatus[] = ['Pending', 'Processing', 'Shipped', 'Delivered', 'Cancelled'];
 
@@ -79,36 +95,54 @@ export default function AdminOrdersPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold font-headline">Manage Orders</h1>
-        {/* Placeholder for "Add New Order" if needed, usually orders come from customers */}
       </div>
       
       <Card>
         <CardHeader>
           <CardTitle>Order List</CardTitle>
-          <CardDescription>Showing all {orders.length} customer orders.</CardDescription>
+          <CardDescription>
+             {isLoading && !error ? "Loading orders..." : 
+             error ? "Error loading orders" :
+             `Showing all ${orders.length} customer orders.`}
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Order ID</TableHead>
-                <TableHead>Customer</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead className="text-right">Total</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-center w-[200px]">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {orders.length === 0 && !isLoading ? (
+          {isLoading && !error ? (
+            <div className="flex justify-center items-center py-10">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <p className="ml-3 text-muted-foreground">Fetching orders...</p>
+            </div>
+          ) : error ? (
+             <div className="text-center py-10 text-destructive">
+              <AlertTriangle className="mx-auto h-10 w-10 mb-2" />
+              <p className="font-semibold">Failed to load orders</p>
+              <p className="text-sm">{error}</p>
+              <Button onClick={fetchOrders} className="mt-4" variant="outline">
+                Try Again
+              </Button>
+            </div>
+          ) : orders.length === 0 ? (
+            <div className="text-center py-10 text-muted-foreground">
+                <PackageSearch className="mx-auto h-12 w-12 mb-3" />
+                <p className="text-lg">No orders found.</p>
+             </div>
+          ) : (
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center h-24">No orders found.</TableCell>
+                  <TableHead>Order ID</TableHead>
+                  <TableHead>Customer Email</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead className="text-right">Total</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-center w-[200px]">Actions</TableHead>
                 </TableRow>
-              ) : (
-                orders.map((order) => (
+              </TableHeader>
+              <TableBody>
+                {orders.map((order) => (
                   <TableRow key={order.id}>
-                    <TableCell className="font-medium">{order.id}</TableCell>
-                    <TableCell>{order.userEmail || order.shippingAddress.fullName}</TableCell>
+                    <TableCell className="font-medium">#{order.db_id || order.id}</TableCell>
+                    <TableCell>{order.userEmail}</TableCell>
                     <TableCell>{new Date(order.orderDate).toLocaleDateString()}</TableCell>
                     <TableCell className="text-right">₹{order.totalAmount.toFixed(2)}</TableCell>
                     <TableCell>
@@ -147,16 +181,13 @@ export default function AdminOrdersPage() {
                             <Eye className="h-4 w-4" />
                           </Button>
                         </Link>
-                        {/* <Button variant="outline" size="icon" title="Edit Order (Placeholder)" disabled>
-                          <Edit className="h-4 w-4" />
-                        </Button> */}
                       </div>
                     </TableCell>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                ))}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
     </div>
