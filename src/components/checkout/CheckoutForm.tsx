@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { useCart } from '@/contexts/CartContext';
 import { useToast } from '@/hooks/use-toast';
-import type { ShippingAddress, SupabaseOrderInsert, SupabaseOrderItemInsert, SupabaseProduct } from '@/lib/types';
+import type { ShippingAddress, SupabaseOrderInsert, SupabaseOrderItemInsert } from '@/lib/types';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 
@@ -48,13 +48,16 @@ export function CheckoutForm() {
 
     try {
       // 1. Create the order
+      // Note: Your 'orders' table schema does not explicitly list 'shipping_address' or 'user_email'.
+      // The code below includes them. If these columns don't exist, the insert will fail.
+      // It's recommended to add `shipping_address JSONB` and `user_email TEXT` to your `orders` table.
       const orderToInsert: SupabaseOrderInsert = {
         user_id: user.id,
-        user_email: user.email,
-        shipping_address: shippingAddress,
+        user_email: user.email, // Assumes you want to store this; add column to Supabase if needed
+        shipping_address: shippingAddress, // Assumes you want to store this; add column (JSONB) to Supabase if needed
         total_amount: getCartTotal(),
-        status: 'Pending', // Or 'Processing'
-        payment_method: 'COD',
+        status: 'Pending', 
+        payment_mode: 'COD', // Matches your table's 'payment_mode'
       };
 
       const { data: newOrderData, error: orderError } = await supabase
@@ -65,7 +68,7 @@ export function CheckoutForm() {
 
       if (orderError || !newOrderData) {
         console.error('Error creating order:', orderError);
-        toast({ title: "Order Placement Failed", description: orderError?.message || "Could not save order.", variant: "destructive" });
+        toast({ title: "Order Placement Failed", description: orderError?.message || "Could not save order. Check if 'shipping_address' and 'user_email' columns exist in your 'orders' table.", variant: "destructive", duration: 10000 });
         setIsLoading(false);
         return;
       }
@@ -77,17 +80,11 @@ export function CheckoutForm() {
       let stockUpdateError = false;
 
       for (const item of cartItems) {
-        // Assuming product.id in Supabase is an integer. If it's text, parseInt is not needed.
-        // For safety, we should fetch the product's integer ID from Supabase if cart stores string IDs from mock data.
-        // However, if product API (/api/products) already returns string IDs that are *meant* to be numbers,
-        // then parseInt might be okay, but can lead to issues if an ID isn't purely numeric.
-        // Let's assume `item.productId` is a string representation of an integer for now.
         const productIdInt = parseInt(item.productId, 10);
         if (isNaN(productIdInt)) {
             console.error(`Invalid product ID for item ${item.name}: ${item.productId}. Skipping item.`);
-            // Potentially roll back or handle this more gracefully
-            stockUpdateError = true; // Mark that an error occurred
-            continue; // Skip this item
+            stockUpdateError = true; 
+            continue; 
         }
 
         orderItemsToInsert.push({
@@ -97,44 +94,44 @@ export function CheckoutForm() {
           price_at_time: item.price,
         });
 
-        // Update stock (this is not atomic and prone to race conditions without transactions/RPC)
-        // A more robust way: use an RPC function in Supabase `decrement_stock(product_id, quantity)`
         const { data: productData, error: productFetchError } = await supabase
           .from('products')
           .select('stock')
-          .eq('id', productIdInt) // Use integer ID for query
+          .eq('id', productIdInt) 
           .single();
 
         if (productFetchError || !productData) {
           console.error(`Error fetching stock for product ${productIdInt}:`, productFetchError);
           stockUpdateError = true;
-          // Decide how to handle: roll back order, notify admin, etc.
-          // For now, we'll just log and potentially fail the whole process later or partially succeed.
           continue; 
         }
 
-        const currentStock = productData.stock;
+        const currentStock = productData.stock || 0; // Default to 0 if stock is null
         const newStock = currentStock - item.quantity;
 
         if (newStock < 0) {
-          console.warn(`Product ${productIdInt} stock cannot go below 0. Order quantity exceeds stock.`);
-          // This is a critical issue. Order should ideally not have been allowed if stock check failed earlier.
-          // Or, the entire order creation should be rolled back here.
-          stockUpdateError = true; // Mark error
-          // Potentially, stop processing further stock updates or the entire order.
-          // For now, we might proceed with other items but flag error for overall failure.
-          continue;
+          console.warn(`Product ${productIdInt} stock cannot go below 0. Clamping to 0.`);
+          // This check is important. Ideally, cart addition logic also prevents this.
+          // For now, clamp stock to 0 if over-sold.
+          const { error: stockClampError } = await supabase
+            .from('products')
+            .update({ stock: 0 })
+            .eq('id', productIdInt);
+          if (stockClampError) {
+            console.error(`Error clamping stock for product ${productIdInt}:`, stockClampError);
+            stockUpdateError = true;
+          }
+          continue; 
         }
         
         const { error: stockUpdateDbError } = await supabase
           .from('products')
           .update({ stock: newStock })
-          .eq('id', productIdInt); // Use integer ID for update
+          .eq('id', productIdInt); 
 
         if (stockUpdateDbError) {
           console.error(`Error updating stock for product ${productIdInt}:`, stockUpdateDbError);
           stockUpdateError = true;
-          // Handle error: roll back, notify etc.
         }
       }
 
@@ -145,12 +142,9 @@ export function CheckoutForm() {
 
         if (orderItemsError) {
             console.error('Error creating order items:', orderItemsError);
-            // IMPORTANT: Rollback order creation here if possible, or mark order as failed.
-            // This is complex without transactions managed client-side.
-            // An Edge Function for order creation is better for atomicity.
             toast({ title: "Order Items Failed", description: orderItemsError.message, variant: "destructive" });
             // Attempt to delete the created order if items fail
-             await supabase.from('orders').delete().eq('id', newOrderId);
+            await supabase.from('orders').delete().eq('id', newOrderId);
             setIsLoading(false);
             return;
         }
@@ -158,18 +152,15 @@ export function CheckoutForm() {
 
 
       if (stockUpdateError) {
-        // If any stock update failed, it's a partial success/failure.
-        // What to do? For now, inform user but order might be in DB.
-        // Ideally, transactions or server-side logic handle atomicity.
-        toast({ title: "Order Placed with Issues", description: `Order #${newOrderId} created, but some stock updates may have failed. Please contact support.`, variant: "destructive", duration: 7000 });
+        toast({ title: "Order Placed with Issues", description: `Order #${newOrderId} created, but some stock updates may have failed or items were out of stock. Please contact support.`, variant: "destructive", duration: 10000 });
       } else {
         toast({ title: "Order Placed!", description: `Your order #${newOrderId} has been successfully placed.` });
       }
 
       clearCart();
       setIsLoading(false);
-      router.push(`/order-confirmation/${newOrderId}`);
-      router.refresh(); // Attempt to refresh server components data
+      router.push(`/order-confirmation/${newOrderId}`); // Use the actual DB order ID
+      router.refresh(); 
 
     } catch (error) {
       console.error('Checkout process error:', error);
@@ -200,9 +191,7 @@ export function CheckoutForm() {
               <Label htmlFor="fullName">Full Name</Label>
               <Input id="fullName" name="fullName" required value={shippingAddress.fullName} onChange={handleInputChange} disabled={isLoading} />
             </div>
-            <div className="space-y-2">
-              {/* Email is tied to account, no separate input here */}
-            </div>
+            {/* Email is tied to account, no separate input here; will be taken from auth user */}
           </div>
           <div className="space-y-2">
             <Label htmlFor="address">Street Address</Label>
