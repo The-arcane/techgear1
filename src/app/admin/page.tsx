@@ -6,60 +6,99 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { PackagePlus, ListOrdered, Settings, Users, LayoutGrid, Loader2, ShieldAlert } from "lucide-react";
-// import type { Metadata } from 'next'; // Metadata for client components is handled differently or in parent layouts
-import { products, getAllOrders } from "@/lib/data"; // Mock data for stats, will be replaced later
+import { products, getAllOrders } from "@/lib/data"; 
 import type { Order } from "@/lib/types";
 import { supabase } from '@/lib/supabaseClient';
 import { useRouter } from 'next/navigation';
-
-// export const metadata: Metadata = { // Static metadata can be set in a parent layout
-//   title: 'Admin Panel | TechGear',
-//   description: 'Manage products, orders, and settings for TechGear.',
-// };
+import type { User as AuthUserType } from '@supabase/supabase-js';
 
 export default function AdminPage() {
-  const [isAdmin, setIsAdmin] = useState<boolean | null>(null); // null for loading state
+  const [authUser, setAuthUser] = useState<AuthUserType | null>(null);
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(null); 
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
 
   useEffect(() => {
-    const checkAdminStatus = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
+    let isMounted = true;
+
+    const performAdminCheck = async (userToCheck: AuthUserType | null) => {
+      if (!isMounted) return;
+
+      if (!userToCheck) {
+        console.log("AdminPage: performAdminCheck - No user provided, redirecting to login.");
+        setAuthUser(null);
         setIsAdmin(false);
         setIsLoading(false);
-        router.push('/admin/login'); // Redirect to admin login if not authenticated
+        router.push('/admin/login');
         return;
       }
 
+      console.log(`AdminPage: performAdminCheck - Checking admin status for user: ${userToCheck.email}`);
+      setAuthUser(userToCheck); 
+      
       const { data: adminData, error: adminError } = await supabase
         .from('admins')
         .select('id')
-        .eq('id', user.id)
+        .eq('id', userToCheck.id)
         .maybeSingle();
 
+      if (!isMounted) return;
+
       if (adminError) {
-        console.error("Error checking admin status:", adminError.message);
+        console.error("AdminPage: Error checking 'admins' table:", adminError.message);
         setIsAdmin(false);
       } else {
-        setIsAdmin(!!adminData);
+        const isAdminUser = !!adminData;
+        setIsAdmin(isAdminUser);
+        if (!isAdminUser) {
+          console.log(`AdminPage: User ${userToCheck.email} is authenticated but NOT an admin.`);
+        } else {
+          console.log(`AdminPage: User ${userToCheck.email} IS an admin.`);
+        }
       }
       setIsLoading(false);
     };
 
-    checkAdminStatus();
-  }, [router]);
+    // Initial check on mount
+    console.log("AdminPage: useEffect - Performing initial user check.");
+    supabase.auth.getUser().then(({ data: { user: initialUser } }) => {
+      if (isMounted) {
+        console.log("AdminPage: Initial supabase.auth.getUser() response - User:", initialUser?.email || "None");
+        performAdminCheck(initialUser);
+      }
+    }).catch(error => {
+      if (isMounted) {
+        console.error("AdminPage: Error in initial supabase.auth.getUser():", error);
+        performAdminCheck(null); // Treat error as no user
+      }
+    });
 
-  // Mock data for overview, replace with API calls as backend develops
-  const totalProducts = products.length; 
-  const allOrders = getAllOrders();
-  const totalOrders = allOrders.length;
+    // Listen for auth state changes
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!isMounted) return;
+      console.log("AdminPage: onAuthStateChange - Event:", event, "- Session User:", session?.user?.email || "None");
+      
+      // When auth state changes, always re-evaluate from loading state
+      setIsLoading(true); 
+      performAdminCheck(session?.user ?? null);
+    });
+
+    return () => {
+      isMounted = false;
+      console.log("AdminPage: useEffect cleanup - Unsubscribing auth listener.");
+      authListener?.subscription.unsubscribe();
+    };
+  }, [router]); // router is a stable dependency
+
+  // Mock data for overview
+  const allMockOrders = getAllOrders();
+  const totalProducts = products.length;
+  const totalOrders = allMockOrders.length;
   
-  const orderStatusCounts = allOrders.reduce((acc, order) => {
+  const orderStatusCounts = allMockOrders.reduce((acc, order) => {
     acc[order.status] = (acc[order.status] || 0) + 1;
     return acc;
   }, {} as Record<Order['status'], number>);
-
 
   if (isLoading || isAdmin === null) {
     return (
@@ -70,7 +109,9 @@ export default function AdminPage() {
     );
   }
 
-  if (!isAdmin) {
+  // If not loading, and isAdmin is false, BUT there is an authUser 
+  // (meaning they are logged in but confirmed not to be an admin)
+  if (!isAdmin && authUser) { 
     return (
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-200px)] text-center">
         <ShieldAlert className="h-16 w-16 text-destructive mb-4" />
@@ -85,7 +126,20 @@ export default function AdminPage() {
       </div>
     );
   }
+  
+  // If loading is false, isAdmin is false, and there's NO authUser,
+  // it means they were redirected by performAdminCheck.
+  // This state should ideally not be visible for long.
+  if (!isAdmin && !authUser && !isLoading) {
+      return (
+      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-200px)]">
+        <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
+        <p className="text-muted-foreground">Redirecting to login...</p>
+      </div>
+    );
+  }
 
+  // If we are here, isLoading is false, authUser exists, and isAdmin is true.
   return (
     <div className="space-y-8">
       <h1 className="text-3xl font-bold font-headline">Admin Panel</h1>
@@ -142,7 +196,7 @@ export default function AdminPage() {
              Category Management
             </CardTitle>
             <CardDescription>Add, edit, or delete categories.</CardDescription>
-          </CardHeader>
+          </Header>
           <CardContent>
             <Link href="/admin/categories">
               <Button className="w-full">Manage Categories</Button>
@@ -157,7 +211,7 @@ export default function AdminPage() {
               Store Settings
             </CardTitle>
             <CardDescription>Configure store preferences.</CardDescription>
-          </CardHeader>
+          </Header>
           <CardContent>
             <Link href="/admin/settings">
               <Button className="w-full">Configure Settings</Button>
