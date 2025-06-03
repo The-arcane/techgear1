@@ -70,24 +70,40 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error) {
-      console.error('Supabase error creating product:', JSON.stringify(error, null, 2)); // Log the full error object
-      console.log('Checking error message for RLS policy violation. Error message:', error.message);
+      console.error('Supabase error creating product:', JSON.stringify(error, null, 2));
+      let userFriendlyMessage = 'Failed to add product to database. Check server logs for details.';
+      let detailedError = error.message; // Default to raw message
+
+      // Log the specific error message we are checking against for RLS
+      console.log('Checking error message for RLS policy violation. Raw Supabase error message:', error.message);
 
       if (error.message.toLowerCase().includes('violates row-level security policy') || error.message.toLowerCase().includes('permission denied')) {
-          return NextResponse.json({ 
-            success: false, 
-            message: 'Product creation failed due to a security policy. Please ensure you have admin privileges and that Row Level Security (RLS) policies are correctly set up on the "products" table in Supabase to allow admin inserts. Specifically, check that your user ID is in the "admins" table if RLS relies on it.', 
-            error: error.message 
-          }, { status: 500 });
+        userFriendlyMessage = 'Product creation failed due to a security policy. Please ensure you have admin privileges and that Row Level Security (RLS) policies are correctly set up on the "products" table in Supabase to allow admin inserts. Specifically, check that your user ID is in the "admins" table if RLS relies on it.';
+        detailedError = error.message;
+      } else if (error.code === '23505') { // Unique constraint violation
+        userFriendlyMessage = 'Failed to add product: A product with similar unique details (e.g., name or another unique field specified in your database schema) already exists.';
+        detailedError = `Database unique constraint (code: 23505) violated: ${error.details || error.message}`;
+      } else if (error.code === '23502') { // Not-null violation
+        userFriendlyMessage = 'Failed to add product: A required field was missing or empty, which violates a not-null constraint in your database.';
+        detailedError = `Database not-null constraint (code: 23502) violated: ${error.details || error.message}`;
+      } else if (error.code === '23503') { // Foreign key violation
+        userFriendlyMessage = 'Failed to add product: A related record (e.g., a category ID that does not exist) caused a foreign key violation.';
+        detailedError = `Database foreign key constraint (code: 23503) violated: ${error.details || error.message}`;
       }
-      return NextResponse.json({ success: false, message: 'Failed to add product to database.', error: error.message }, { status: 500 });
+      // Add more specific checks if needed, e.g., for data type mismatches if Supabase provides distinct codes.
+
+      return NextResponse.json({
+        success: false,
+        message: userFriendlyMessage, // This will be shown in the toast and console.error on client
+        error: detailedError // This provides more specific DB error info, also available client-side if needed
+      }, { status: 500 });
     }
 
     return NextResponse.json({ success: true, message: 'Product added successfully!', product: newProduct }, { status: 201 });
 
-  } catch (error) {
-    console.error('API - Unexpected error creating product:', error);
-    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+  } catch (e) { // Catch errors from request.json() or other synchronous code before Supabase call
+    console.error('API - Unexpected error creating product (e.g., malformed JSON request):', e);
+    const errorMessage = e instanceof Error ? e.message : 'An unknown error occurred while processing the request.';
     return NextResponse.json({ success: false, message: 'Failed to process request.', error: errorMessage }, { status: 500 });
   }
 }
