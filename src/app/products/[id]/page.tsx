@@ -1,6 +1,6 @@
 
 import Image from 'next/image';
-import { getProductById, products as allProducts } from '@/lib/data'; // Using allProducts for generateStaticParams
+// import { getProductById, products as allProducts } from '@/lib/data'; // Using allProducts for generateStaticParams
 import { AddToCartButton } from '@/components/products/AddToCartButton';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,13 +9,33 @@ import { Separator } from '@/components/ui/separator';
 import Link from 'next/link';
 import { ChevronRight, CheckCircle, AlertTriangle } from 'lucide-react';
 import type { Metadata } from 'next';
+import type { Product } from '@/lib/types';
 
 type ProductPageProps = {
   params: { id: string };
 };
 
+async function getProductById(productId: string): Promise<Product | null> {
+  // Prefer NEXT_PUBLIC_APP_URL for server-side fetches if available
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || '';
+  try {
+    const res = await fetch(`${baseUrl}/api/products/${productId}`, { cache: 'no-store' }); // Fetch fresh data
+    if (!res.ok) {
+      if (res.status === 404) return null;
+      console.error(`Failed to fetch product ${productId}: ${res.statusText}`);
+      return null;
+    }
+    const data = await res.json();
+    return data.product;
+  } catch (error) {
+    console.error(`Error fetching product ${productId}:`, error);
+    return null;
+  }
+}
+
+
 export async function generateMetadata({ params }: ProductPageProps): Promise<Metadata> {
-  const product = getProductById(params.id);
+  const product = await getProductById(params.id);
   if (!product) {
     return {
       title: 'Product Not Found',
@@ -27,16 +47,20 @@ export async function generateMetadata({ params }: ProductPageProps): Promise<Me
   };
 }
 
-// Static paths for products
-export async function generateStaticParams() {
-  return allProducts.map((product) => ({
-    id: product.id,
-  }));
-}
+// Removing generateStaticParams to make the page dynamically rendered for now.
+// It can be re-added later by fetching all product IDs from the API if performance becomes an issue.
+// export async function generateStaticParams() {
+//   const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || ''}/api/products`);
+//   if (!res.ok) return [];
+//   const { products: fetchedProducts } = await res.json();
+//   return fetchedProducts.map((product: Product) => ({
+//     id: product.id.toString(),
+//   }));
+// }
 
-export default function ProductPage({ params }: ProductPageProps) {
+export default async function ProductPage({ params }: ProductPageProps) {
   const { id } = params;
-  const product = getProductById(id);
+  const product = await getProductById(id);
 
   if (!product) {
     return (
@@ -143,16 +167,20 @@ export default function ProductPage({ params }: ProductPageProps) {
 
               <div>
                 <h3 className="text-xl font-semibold mb-4 font-headline">Specifications</h3>
-                <Table>
-                  <TableBody>
-                    {Object.entries(product.specifications).map(([key, value]) => (
-                      <TableRow key={key}>
-                        <TableCell className="font-medium w-1/3">{key}</TableCell>
-                        <TableCell>{value}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                {Object.keys(product.specifications).length > 0 ? (
+                  <Table>
+                    <TableBody>
+                      {Object.entries(product.specifications).map(([key, value]) => (
+                        <TableRow key={key}>
+                          <TableCell className="font-medium w-1/3">{key}</TableCell>
+                          <TableCell>{value}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                ) : (
+                  <p className="text-muted-foreground">No specifications available.</p>
+                )}
               </div>
             </CardContent>
           </div>
