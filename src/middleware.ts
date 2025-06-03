@@ -4,27 +4,42 @@ import { NextResponse, type NextRequest } from 'next/server'
 
 export async function middleware(request: NextRequest) {
   console.log(`[Middleware] Running for path: ${request.nextUrl.pathname}`);
-  
-  // Create the response object once at the beginning.
-  // This will be mutated by the cookie handlers if Supabase needs to set/remove cookies.
-  const response = NextResponse.next({
+
+  // Initialize response at the beginning. This response object will be returned.
+  // It can be mutated by Supabase client's cookie handlers.
+  let response = NextResponse.next({
     request: {
       headers: request.headers,
     },
   });
 
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    console.error("[Middleware] CRITICAL: Supabase URL or Anon Key is missing from environment variables.");
+    // Potentially redirect to an error page or just proceed if some paths don't need auth
+    return response; // Or handle error appropriately
+  }
+
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    supabaseUrl,
+    supabaseAnonKey,
     {
       cookies: {
         get(name: string) {
           return request.cookies.get(name)?.value;
         },
         set(name: string, value: string, options: CookieOptions) {
-          // The `request` object's cookies are not mutated directly here,
-          // Supabase client relies on its internal state being updated by `set`.
-          // For the outgoing response, we set the cookie on our single `response` object.
+          // The `set` method is called by Supabase when it needs to update a cookie.
+          // We need to update both the `request` (for the current server-side pass)
+          // and the `response` (for the browser).
+          request.cookies.set({
+            name,
+            value,
+            ...options,
+          });
+          // Update the response object directly.
           response.cookies.set({
             name,
             value,
@@ -32,8 +47,14 @@ export async function middleware(request: NextRequest) {
           });
         },
         remove(name: string, options: CookieOptions) {
-          // Similar to `set`, we modify the `response` object's cookies.
-          response.cookies.set({ // Or response.cookies.delete(name, options)
+          // The `remove` method is called by Supabase when it needs to delete a cookie.
+          request.cookies.set({ // Effectively removing by setting an empty value with options
+            name,
+            value: '',
+            ...options,
+          });
+           // Update the response object directly.
+          response.cookies.set({
             name,
             value: '',
             ...options,
@@ -43,19 +64,19 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  // Attempt to refresh the session.
-  // This will potentially call the `set` or `remove` handlers above if the session changes.
-  const { data: { session }, error } = await supabase.auth.getSession();
+  // Refresh session before passing to the page
+  // This will also handle session expiry and refresh tokens.
+  const { data: { user }, error } = await supabase.auth.getUser();
 
   if (error) {
-    console.error('[Middleware] Error getting/refreshing session. Name:', error.name, 'Message:', error.message);
-  } else if (session) {
-    console.log('[Middleware] Session successfully refreshed/retrieved. User ID:', session.user.id);
+    console.error('[Middleware] Error from supabase.auth.getUser():', error.name, error.message, 'Status:', (error as any).status);
+  } else if (user) {
+    console.log('[Middleware] User session retrieved/refreshed in middleware. User ID:', user.id);
   } else {
-    console.log('[Middleware] No active session found by getSession().');
+    console.log('[Middleware] No active user session found by supabase.auth.getUser() in middleware.');
   }
   
-  // Return the (potentially modified) response object.
+  // It's important to return the potentially modified response object.
   return response;
 }
 
