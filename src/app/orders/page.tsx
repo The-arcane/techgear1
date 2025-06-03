@@ -24,7 +24,6 @@ export default async function OrdersPage() {
   console.log('[OrdersPage] Attempting to get user session...');
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   
-  console.log('[OrdersPage] User object from supabase.auth.getUser():', JSON.stringify(user, null, 2));
   if (authError) {
     console.error(
       '[OrdersPage] Error getting user session. Name:', authError.name, 
@@ -33,6 +32,8 @@ export default async function OrdersPage() {
       'Full Error:', JSON.stringify(authError, null, 2)
     );
   }
+  console.log('[OrdersPage] User object from supabase.auth.getUser():', JSON.stringify(user, null, 2));
+
 
   if (authError || !user) {
     console.log('[OrdersPage] Auth error or no user found, redirecting to login. AuthError:', !!authError, 'User:', !!user);
@@ -59,11 +60,11 @@ export default async function OrdersPage() {
   }
   
   const orders: Order[] = ordersData?.map((dbOrder: SupabaseOrderFetched) => ({
-    id: dbOrder.id.toString(),
+    id: dbOrder.id.toString(), // Using Supabase integer ID as string for app consistency
     db_id: dbOrder.id,
     userId: dbOrder.user_id || '', 
-    userEmail: dbOrder.user_email, // This now matches the schema
-    items: [], 
+    userEmail: dbOrder.user_email,
+    items: [], // Items are not fetched for the list view to keep it light
     totalAmount: dbOrder.total_amount,
     status: dbOrder.status as OrderStatus || 'Pending',
     orderDate: dbOrder.created_at,

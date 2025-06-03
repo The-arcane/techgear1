@@ -72,7 +72,7 @@ async function getOrderDetailsFromSupabase(orderIdNum: number, userId: string): 
     totalAmount: orderData.total_amount,
     status: orderData.status as OrderStatus || 'Pending',
     orderDate: orderData.created_at,
-    shippingAddress: orderData.shipping_address as ShippingAddress, // Assuming direct compatibility
+    shippingAddress: orderData.shipping_address as ShippingAddress, 
     paymentMethod: (orderData.payment_mode as 'COD') || 'COD',
   };
 }
