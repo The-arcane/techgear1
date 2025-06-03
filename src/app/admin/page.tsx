@@ -22,7 +22,7 @@ export default function AdminPage() {
   const [authUser, setAuthUser] = useState<AuthUserType | null>(null);
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
-  const [isLoadingStats, setIsLoadingStats] = useState(false);
+  const [isLoadingStats, setIsLoadingStats] = useState(false); // Separate loading for stats
   const [statsError, setStatsError] = useState<string | null>(null);
   const [storeStats, setStoreStats] = useState<StoreStats>({
     totalProducts: 0,
@@ -32,7 +32,7 @@ export default function AdminPage() {
   });
   const router = useRouter();
   const isMounted = useRef(false);
-  const initialAuthCheckDone = useRef(false); // To track initial auth check
+  const initialAuthCheckDone = useRef(false);
 
   useEffect(() => {
     isMounted.current = true;
@@ -44,11 +44,14 @@ export default function AdminPage() {
   }, []);
 
   const fetchStoreStats = async () => {
-    if (!isMounted.current || !isAdmin || !authUser) { // Added !authUser check
-      console.log("[AdminPage] fetchStoreStats: Skipped, component not mounted, user not admin, or no authUser.");
-      if (isMounted.current) setIsLoadingStats(false); // Ensure stats loading is false if skipped
+    // This function will now be called by a dedicated useEffect
+    // The guards !isAdmin || !authUser are still useful if it's somehow called directly
+    if (!isMounted.current || !isAdmin || !authUser) {
+      console.log("[AdminPage] fetchStoreStats: Skipped, conditions not met (isMounted:", isMounted.current, "isAdmin:", isAdmin, "authUser:", !!authUser, ")");
+      if (isMounted.current) setIsLoadingStats(false);
       return;
     }
+
     console.log("[AdminPage] fetchStoreStats: Starting to fetch stats for admin:", authUser.id);
     setIsLoadingStats(true);
     setStatsError(null);
@@ -59,7 +62,7 @@ export default function AdminPage() {
       const { count: productsCount, error: productsError } = await supabase
         .from('products')
         .select('*', { count: 'exact', head: true });
-      console.log(`[AdminPage] fetchStoreStats: Products query took ${Date.now() - productsQueryStartTime}ms. Error:`, productsError);
+      console.log(`[AdminPage] fetchStoreStats: Products query took ${Date.now() - productsQueryStartTime}ms. Raw productsCount: ${productsCount}. Error:`, productsError);
       if (productsError) throw new Error(`Products fetch error: ${productsError.message}`);
 
       console.log("[AdminPage] fetchStoreStats: Fetching total orders...");
@@ -67,7 +70,7 @@ export default function AdminPage() {
       const { count: ordersCount, error: ordersError } = await supabase
         .from('orders')
         .select('*', { count: 'exact', head: true });
-      console.log(`[AdminPage] fetchStoreStats: Total orders query took ${Date.now() - ordersQueryStartTime}ms. Error:`, ordersError);
+      console.log(`[AdminPage] fetchStoreStats: Total orders query took ${Date.now() - ordersQueryStartTime}ms. Raw ordersCount: ${ordersCount}. Error:`, ordersError);
       if (ordersError) throw new Error(`Total orders fetch error: ${ordersError.message}`);
       
       console.log("[AdminPage] fetchStoreStats: Fetching pending orders...");
@@ -76,7 +79,7 @@ export default function AdminPage() {
         .from('orders')
         .select('*', { count: 'exact', head: true })
         .eq('status', 'Pending' as OrderStatus);
-      console.log(`[AdminPage] fetchStoreStats: Pending orders query took ${Date.now() - pendingQueryStartTime}ms. Error:`, pendingError);
+      console.log(`[AdminPage] fetchStoreStats: Pending orders query took ${Date.now() - pendingQueryStartTime}ms. Raw pendingOrdersCount: ${pendingOrdersCount}. Error:`, pendingError);
       if (pendingError) throw new Error(`Pending orders fetch error: ${pendingError.message}`);
 
       console.log("[AdminPage] fetchStoreStats: Fetching completed orders...");
@@ -84,23 +87,26 @@ export default function AdminPage() {
       const { count: completedOrdersCount, error: completedError } = await supabase
         .from('orders')
         .select('*', { count: 'exact', head: true })
-        .eq('status', 'Delivered' as OrderStatus); // Assuming 'Delivered' means completed
-      console.log(`[AdminPage] fetchStoreStats: Completed orders query took ${Date.now() - completedQueryStartTime}ms. Error:`, completedError);
+        .eq('status', 'Delivered' as OrderStatus);
+      console.log(`[AdminPage] fetchStoreStats: Completed orders query took ${Date.now() - completedQueryStartTime}ms. Raw completedOrdersCount: ${completedOrdersCount}. Error:`, completedError);
       if (completedError) throw new Error(`Completed orders fetch error: ${completedError.message}`);
       
       if (isMounted.current) {
-        setStoreStats({
+        const newStats = {
           totalProducts: productsCount || 0,
           totalOrders: ordersCount || 0,
           pendingOrders: pendingOrdersCount || 0,
           completedOrders: completedOrdersCount || 0,
-        });
-        console.log("[AdminPage] fetchStoreStats: Stats updated.", { productsCount, ordersCount, pendingOrdersCount, completedOrdersCount });
+        };
+        setStoreStats(newStats);
+        console.log("[AdminPage] fetchStoreStats: Stats updated in state.", newStats);
       }
     } catch (error: any) {
       console.error("[AdminPage] fetchStoreStats: Error fetching store stats:", error.message, error);
       if (isMounted.current) {
         setStatsError(error.message || "Failed to load store statistics.");
+        // Optionally reset stats to 0 on error
+        setStoreStats({ totalProducts: 0, totalOrders: 0, pendingOrders: 0, completedOrders: 0 });
       }
     } finally {
       if (isMounted.current) {
@@ -110,16 +116,16 @@ export default function AdminPage() {
     }
   };
 
+  // Effect for Auth State and Admin Check
   useEffect(() => {
     let isEffectSubscribed = true;
     console.log("[AdminPage] Auth useEffect: Running. isLoadingAuth:", isLoadingAuth, "initialAuthCheckDone:", initialAuthCheckDone.current);
 
-    if (!initialAuthCheckDone.current) { // Only set true if initial check hasn't been flagged as done.
+    if (!initialAuthCheckDone.current) {
         setIsLoadingAuth(true);
     }
 
-
-    const checkAuthAndAdminStatus = async (user: AuthUserType | null) => {
+    const checkAdminStatusAndSetUser = async (user: AuthUserType | null) => {
       if (!isEffectSubscribed || !isMounted.current) return;
       setAuthUser(user);
 
@@ -140,10 +146,8 @@ export default function AdminPage() {
           } else {
             const isAdminUser = !!adminData;
             setIsAdmin(isAdminUser);
-            console.log("[AdminPage] Auth useEffect: isAdminUser set to:", isAdminUser);
-            if (isAdminUser) {
-              await fetchStoreStats(); 
-            }
+            console.log("[AdminPage] Auth useEffect: isAdmin state set to:", isAdminUser);
+            // fetchStoreStats will be called by its own useEffect now
           }
         } catch (e: any) {
           if (!isEffectSubscribed || !isMounted.current) return;
@@ -162,16 +166,15 @@ export default function AdminPage() {
       }
     };
     
-    // Initial session check only if not already performed
     if (!initialAuthCheckDone.current) {
         supabase.auth.getSession().then(async ({ data: { session } }) => {
           if (!isEffectSubscribed || !isMounted.current) return;
           console.log("[AdminPage] Auth useEffect: Initial getSession. User:", session?.user?.id || "None");
-          await checkAuthAndAdminStatus(session?.user ?? null);
+          await checkAdminStatusAndSetUser(session?.user ?? null);
         }).catch((err) => {
           if (!isEffectSubscribed || !isMounted.current) return;
           console.error("[AdminPage] Auth useEffect: Error in initial getSession:", err.message);
-          checkAuthAndAdminStatus(null); 
+          checkAdminStatusAndSetUser(null); 
            if (isEffectSubscribed && isMounted.current && !initialAuthCheckDone.current) {
             setIsLoadingAuth(false);
             initialAuthCheckDone.current = true;
@@ -180,16 +183,13 @@ export default function AdminPage() {
         });
     }
 
-
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!isEffectSubscribed || !isMounted.current) return;
       console.log("[AdminPage] Auth useEffect: onAuthStateChange event:", event, "Session User ID:", session?.user?.id || "None");
       
-      const wasLoadingAuth = isLoadingAuth; // Capture current loading state
-      await checkAuthAndAdminStatus(session?.user ?? null);
+      const wasLoadingAuth = isLoadingAuth;
+      await checkAdminStatusAndSetUser(session?.user ?? null);
       
-      // If initialAuthCheckDone is false, it means this onAuthStateChange might be the *first* confirmation
-      // of auth state (e.g. after a redirect). So, if it was loading, mark it as done.
       if (isEffectSubscribed && isMounted.current && !initialAuthCheckDone.current && wasLoadingAuth) {
           setIsLoadingAuth(false);
           initialAuthCheckDone.current = true;
@@ -202,9 +202,19 @@ export default function AdminPage() {
       console.log("[AdminPage] Auth useEffect: Cleaning up. Unsubscribing auth listener.");
       authListener?.subscription.unsubscribe();
     };
-  }, []); 
+  }, []); // Empty dependency array, runs once on mount
 
+  // New useEffect specifically for fetching store stats once admin status and auth are confirmed
+  useEffect(() => {
+    if (isMounted.current && isAdmin && authUser && !isLoadingAuth) {
+      console.log("[AdminPage] Stats useEffect: isAdmin is true, authUser exists, not loading auth. Calling fetchStoreStats.");
+      fetchStoreStats();
+    } else if (isMounted.current && !isLoadingAuth) { // Only log if not in initial auth loading
+      console.log("[AdminPage] Stats useEffect: Conditions NOT met for fetching stats (isAdmin:", isAdmin, ", authUser:", !!authUser, ", isLoadingAuth:", isLoadingAuth, ")");
+    }
+  }, [isAdmin, authUser, isLoadingAuth]); // Rerun when isAdmin, authUser, or isLoadingAuth changes
 
+  // Redirect useEffect
   useEffect(() => {
     if (!isLoadingAuth && !authUser && isMounted.current && initialAuthCheckDone.current) {
       console.log("[AdminPage] Redirect useEffect: Not loading auth, no authUser, initial check done. Redirecting to /admin/login.");
@@ -247,6 +257,7 @@ export default function AdminPage() {
     );
   }
   
+  // If authUser and isAdmin, render admin content
   if (authUser && isAdmin) {
     return (
       <div className="space-y-8">
@@ -347,7 +358,7 @@ export default function AdminPage() {
                     <ShieldAlert className="mx-auto h-8 w-8 mb-2" />
                     <p className="font-semibold">Error loading statistics</p>
                     <p className="text-sm">{statsError}</p>
-                    <Button onClick={fetchStoreStats} className="mt-3" variant="outline" size="sm">Retry Stats</Button>
+                    <Button onClick={fetchStoreStats} className="mt-3" variant="outline" size="sm" disabled={isLoadingStats}>Retry Stats</Button>
                 </div>
             )}
             {!isLoadingStats && !statsError && (
@@ -380,13 +391,12 @@ export default function AdminPage() {
     );
   }
 
+  // Fallback for any unhandled state during initial load or transitions
   return (
     <div className="flex flex-col items-center justify-center min-h-[calc(100vh-200px)]">
       <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-      <p className="text-muted-foreground">Determining admin page state...</p>
+      <p className="text-muted-foreground">Initializing admin panel...</p>
     </div>
   );
 }
-    
-
     
