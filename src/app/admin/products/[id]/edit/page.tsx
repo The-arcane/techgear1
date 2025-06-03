@@ -1,5 +1,5 @@
 
-"use client"; // This will be a client component due to form interactions
+"use client";
 
 import { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
@@ -8,17 +8,17 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { categories, getProductById } from "@/lib/data"; // Mock data
+import { categories as mockCategories } from "@/lib/data"; 
 import type { Product } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { Loader2, ArrowLeft } from 'lucide-react';
 
 interface EditProductPageProps {
   params: { id: string };
 }
 
-// In a real app, this would be more comprehensive
 interface EditProductFormState {
   name: string;
   description: string;
@@ -33,24 +33,47 @@ export default function EditProductPage({ params }: EditProductPageProps) {
   const [product, setProduct] = useState<Product | null>(null);
   const [formData, setFormData] = useState<EditProductFormState | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isFetchingProduct, setIsFetchingProduct] = useState(true);
   const { toast } = useToast();
   const router = useRouter();
 
   useEffect(() => {
-    const fetchedProduct = getProductById(productId);
-    if (fetchedProduct) {
-      setProduct(fetchedProduct);
-      setFormData({
-        name: fetchedProduct.name,
-        description: fetchedProduct.description,
-        categorySlug: fetchedProduct.categorySlug,
-        price: fetchedProduct.price.toString(),
-        stock: fetchedProduct.stock.toString(),
-        imageUrl1: fetchedProduct.images[0] || '',
-      });
-    } else {
-      toast({ title: "Error", description: "Product not found.", variant: "destructive" });
-      router.push('/admin/products');
+    const fetchProductDetails = async () => {
+      setIsFetchingProduct(true);
+      try {
+        // Fetch the product from your API /api/products/[id]
+        const response = await fetch(`/api/products/${productId}`);
+        if (!response.ok) {
+          throw new Error('Failed to fetch product details');
+        }
+        const data = await response.json();
+        const fetchedProduct: Product = data.product;
+
+        if (fetchedProduct) {
+          setProduct(fetchedProduct);
+          setFormData({
+            name: fetchedProduct.name,
+            description: fetchedProduct.description,
+            categorySlug: fetchedProduct.categorySlug,
+            price: fetchedProduct.price.toString(),
+            stock: fetchedProduct.stock.toString(),
+            imageUrl1: fetchedProduct.images[0] || '',
+          });
+        } else {
+          toast({ title: "Error", description: "Product not found.", variant: "destructive" });
+          router.push('/admin/products');
+        }
+      } catch (error) {
+        console.error("Error fetching product for edit:", error);
+        toast({ title: "Error", description: "Could not load product data.", variant: "destructive" });
+        router.push('/admin/products');
+      } finally {
+        setIsFetchingProduct(false);
+      }
+    };
+
+    if (productId) {
+      fetchProductDetails();
     }
   }, [productId, toast, router]);
 
@@ -70,30 +93,54 @@ export default function EditProductPage({ params }: EditProductPageProps) {
     e.preventDefault();
     if (!formData) return;
     setIsLoading(true);
-    console.log("Updating product:", productId, formData);
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
     
-    // Placeholder for server action to update product
-    // const result = await updateProductAction(productId, formData);
-    const result = { success: true, message: "Product updated successfully (mock)" }; // Mock result
+    try {
+      const response = await fetch(`/api/admin/products/${productId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      });
 
-    if (result.success) {
-      toast({ title: "Success", description: result.message });
-      router.push('/admin/products'); // Redirect to product list
-    } else {
-      toast({ title: "Error", description: result.message, variant: "destructive" });
+      const result = await response.json();
+
+      if (response.ok && result.success) {
+        toast({ title: "Success", description: result.message || "Product updated successfully!" });
+        router.push('/admin/products');
+        router.refresh(); 
+      } else {
+        const errorMsg = result.errors ? Object.values(result.errors).flat().join(', ') : result.message;
+        toast({ title: "Error Updating Product", description: errorMsg || "An unknown error occurred.", variant: "destructive" });
+      }
+    } catch (error) {
+      console.error("Network or unexpected error:", error);
+      toast({ title: "Network Error", description: "Could not connect to the server.", variant: "destructive" });
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
+  if (isFetchingProduct) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        <p className="ml-3 text-muted-foreground">Loading product details...</p>
+      </div>
+    );
+  }
+  
   if (!product || !formData) {
-    return <div className="text-center py-10">Loading product details...</div>; // Or a proper skeleton loader
+    // This case should be handled by the redirect in useEffect, but as a fallback
+    return <div className="text-center py-10">Product data could not be loaded.</div>;
   }
   
   return (
     <div className="space-y-6 max-w-3xl mx-auto">
-      <h1 className="text-3xl font-bold font-headline">Edit Product: {product.name}</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-3xl font-bold font-headline">Edit Product: {product.name}</h1>
+         <Link href="/admin/products">
+          <Button variant="outline"><ArrowLeft className="mr-2 h-4 w-4" /> Back to Products</Button>
+        </Link>
+      </div>
       <form onSubmit={handleSubmit}>
         <Card>
           <CardHeader>
@@ -113,7 +160,7 @@ export default function EditProductPage({ params }: EditProductPageProps) {
                     <SelectValue placeholder="Select category" />
                   </SelectTrigger>
                   <SelectContent>
-                    {categories.map(cat => (
+                    {mockCategories.map(cat => (
                       <SelectItem key={cat.slug} value={cat.slug}>{cat.name}</SelectItem>
                     ))}
                   </SelectContent>
@@ -129,25 +176,25 @@ export default function EditProductPage({ params }: EditProductPageProps) {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="price">Price (₹)</Label>
-                <Input id="price" name="price" type="number" step="0.01" value={formData.price} onChange={handleChange} required disabled={isLoading} />
+                <Input id="price" name="price" type="text" inputMode="decimal" pattern="[0-9]*[.,]?[0-9]+" value={formData.price} onChange={handleChange} required disabled={isLoading} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="stock">Stock Quantity</Label>
-                <Input id="stock" name="stock" type="number" value={formData.stock} onChange={handleChange} required disabled={isLoading} />
+                <Input id="stock" name="stock" type="number" inputMode="numeric" pattern="[0-9]*" value={formData.stock} onChange={handleChange} required disabled={isLoading} />
               </div>
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="imageUrl1">Main Image URL</Label>
-              <Input id="imageUrl1" name="imageUrl1" placeholder="https://placehold.co/600x400.png" value={formData.imageUrl1} onChange={handleChange} required disabled={isLoading} />
+              <Input id="imageUrl1" name="imageUrl1" placeholder="https://placehold.co/600x400.png" value={formData.imageUrl1} onChange={handleChange} disabled={isLoading} type="url" />
+               <p className="text-xs text-muted-foreground">Leave blank to use a default placeholder if desired by API, or provide a valid URL.</p>
             </div>
-            {/* Add more fields for specifications, other images etc. */}
           </CardContent>
           <CardFooter className="flex justify-end gap-2">
             <Link href="/admin/products">
               <Button type="button" variant="outline" disabled={isLoading}>Cancel</Button>
             </Link>
-            <Button type="submit" disabled={isLoading}>
+            <Button type="submit" disabled={isLoading || isFetchingProduct}>
               {isLoading ? "Saving..." : "Save Changes"}
             </Button>
           </CardFooter>

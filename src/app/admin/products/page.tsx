@@ -1,55 +1,90 @@
 
-"use client"; // Make this a client component to fetch data
+"use client"; 
 
 import { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-// import { products as mockProducts } from "@/lib/data"; // Remove mock data import
 import type { Product } from '@/lib/types';
-import { Edit3, Trash2, PlusCircle, ExternalLink, Loader2, AlertTriangle } from "lucide-react";
+import { Edit3, Trash2, PlusCircle, ExternalLink, Loader2, AlertTriangle, PackageSearch } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
-// import type { Metadata } from 'next'; // Metadata needs to be handled differently
+import { useToast } from "@/hooks/use-toast";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
+import { useRouter } from 'next/navigation';
 
-// export const metadata: Metadata = { // Static metadata is fine if defined in a parent layout or this remains a server component
-//   title: 'Manage Products | Admin Panel | TechGear',
-//   description: 'View, add, edit, or delete products in the TechGear store.',
-// };
 
 export default function AdminProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [productToDelete, setProductToDelete] = useState<Product | null>(null);
+  const { toast } = useToast();
+  const router = useRouter();
   
-  // In a real app, this would involve role checks
   const isAdmin = true; 
 
-  useEffect(() => {
-    async function fetchProducts() {
-      setIsLoading(true);
-      setError(null);
-      try {
-        const response = await fetch('/api/products'); // Relative path for client-side fetch
-        if (!response.ok) {
-          throw new Error(`Failed to fetch products: ${response.statusText}`);
-        }
-        const data = await response.json();
-        setProducts(data.products || []);
-      } catch (err) {
-        console.error("Error fetching products:", err);
-        setError(err instanceof Error ? err.message : "An unknown error occurred");
-        setProducts([]);
-      } finally {
-        setIsLoading(false);
+  async function fetchProducts() {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const response = await fetch('/api/products'); 
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `Failed to fetch products: ${response.statusText}`);
       }
+      const data = await response.json();
+      setProducts(data.products || []);
+    } catch (err) {
+      console.error("Error fetching products:", err);
+      setError(err instanceof Error ? err.message : "An unknown error occurred");
+      setProducts([]);
+    } finally {
+      setIsLoading(false);
     }
+  }
+
+  useEffect(() => {
     if (isAdmin) {
       fetchProducts();
     } else {
-      setIsLoading(false); // If not admin, don't attempt to load
+      setIsLoading(false); 
     }
   }, [isAdmin]);
+
+  const handleDeleteProduct = async () => {
+    if (!productToDelete) return;
+    setIsLoading(true); // Use general loading state for simplicity or a specific one
+    try {
+      const response = await fetch(`/api/admin/products/${productToDelete.id}`, {
+        method: 'DELETE',
+      });
+      const result = await response.json();
+      if (response.ok && result.success) {
+        toast({ title: "Success", description: result.message || "Product deleted successfully!" });
+        setProducts(prevProducts => prevProducts.filter(p => p.id !== productToDelete.id));
+      } else {
+         toast({ title: "Error Deleting Product", description: result.message || "Could not delete product.", variant: "destructive", duration: 7000 });
+      }
+    } catch (err) {
+      console.error("Error deleting product:", err);
+      toast({ title: "Network Error", description: "Could not connect to server to delete product.", variant: "destructive" });
+    } finally {
+      setIsLoading(false);
+      setProductToDelete(null); 
+    }
+  };
+
 
   if (!isAdmin) {
      return (
@@ -75,13 +110,13 @@ export default function AdminProductsPage() {
         <CardHeader>
           <CardTitle>Product List</CardTitle>
           <CardDescription>
-            {isLoading ? "Loading products..." : 
+            {isLoading && !error ? "Loading products..." : 
              error ? "Error loading products" :
              `Showing all ${products.length} products in the store.`}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {isLoading ? (
+          {isLoading && !error ? (
             <div className="flex justify-center items-center py-10">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
               <p className="ml-3 text-muted-foreground">Fetching products...</p>
@@ -91,7 +126,7 @@ export default function AdminProductsPage() {
               <AlertTriangle className="mx-auto h-10 w-10 mb-2" />
               <p className="font-semibold">Failed to load products</p>
               <p className="text-sm">{error}</p>
-              <Button onClick={() => window.location.reload()} className="mt-4" variant="outline">
+              <Button onClick={fetchProducts} className="mt-4" variant="outline">
                 Try Again
               </Button>
             </div>
@@ -110,7 +145,7 @@ export default function AdminProductsPage() {
                   <TableHead>Category</TableHead>
                   <TableHead className="text-right">Price</TableHead>
                   <TableHead className="text-right">Stock</TableHead>
-                  <TableHead className="text-center w-[150px]">Actions</TableHead>
+                  <TableHead className="text-center w-[180px]">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -127,7 +162,7 @@ export default function AdminProductsPage() {
                         />
                       </div>
                     </TableCell>
-                    <TableCell className="font-medium">{product.name}</TableCell>
+                    <TableCell className="font-medium max-w-[200px] truncate" title={product.name}>{product.name}</TableCell>
                     <TableCell>{product.categorySlug}</TableCell>
                     <TableCell className="text-right">₹{product.price.toFixed(2)}</TableCell>
                     <TableCell className="text-right">{product.stock}</TableCell>
@@ -143,9 +178,34 @@ export default function AdminProductsPage() {
                             <Edit3 className="h-4 w-4" />
                           </Button>
                         </Link>
-                        <Button variant="destructive" size="icon" title="Delete Product" onClick={() => alert(`Delete product ${product.name}? (Not implemented)`)}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="destructive" size="icon" title="Delete Product" onClick={() => setProductToDelete(product)}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          {productToDelete && productToDelete.id === product.id && (
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  This action cannot be undone. This will permanently delete the product
+                                  "{productToDelete.name}".
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel onClick={() => setProductToDelete(null)}>Cancel</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={handleDeleteProduct}
+                                  className="bg-destructive hover:bg-destructive/90"
+                                  disabled={isLoading}
+                                >
+                                  {isLoading && productToDelete?.id === product.id ? "Deleting..." : "Yes, delete product"}
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          )}
+                        </AlertDialog>
                       </div>
                     </TableCell>
                   </TableRow>
