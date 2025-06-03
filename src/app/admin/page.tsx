@@ -1,12 +1,12 @@
 
 "use client";
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { PackagePlus, ListOrdered, Settings, Users, LayoutGrid, Loader2, ShieldAlert, LogIn } from "lucide-react";
-import { getAllOrders } from "@/lib/data"; // Ensure this is appropriate or replace with actual data fetching
+import { getAllOrders } from "@/lib/data";
 import type { Order } from "@/lib/types";
 import { supabase } from '@/lib/supabaseClient';
 import { useRouter } from 'next/navigation';
@@ -15,13 +15,13 @@ import type { User as AuthUserType } from '@supabase/supabase-js';
 export default function AdminPage() {
   const [authUser, setAuthUser] = useState<AuthUserType | null>(null);
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true); // Start true
   const router = useRouter();
-  const initialAuthProcessed = useRef(false); // Tracks if onAuthStateChange has run at least once
 
   useEffect(() => {
     let isMounted = true;
-    console.log("AdminPage: useEffect mounted. Preview Debug.");
+    console.log("AdminPage: useEffect mounted. Setting isLoading to true. Preview Debug.");
+    setIsLoading(true); // Explicitly set loading true when effect runs
 
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!isMounted) {
@@ -36,7 +36,6 @@ export default function AdminPage() {
       if (currentUser) {
         console.log(`AdminPage: onAuthStateChange - User found: ${currentUser.id}. Checking admin status. Preview Debug.`);
         try {
-          // This is the critical admin check
           const { data: adminData, error: adminError } = await supabase
             .from('admins')
             .select('id')
@@ -63,52 +62,26 @@ export default function AdminPage() {
         setIsAdmin(false);
       }
       
-      // Mark that the initial auth state has been processed and set loading to false
-      if (!initialAuthProcessed.current) {
-        initialAuthProcessed.current = true;
+      if (isMounted) {
+        setIsLoading(false); 
+        console.log("AdminPage: onAuthStateChange - setIsLoading(false). Preview Debug.");
       }
-      setIsLoading(false); 
     });
-
-    // Fallback for environments where onAuthStateChange might not fire initially as expected
-    // or if there's no existing session.
-    // This helps ensure isLoading is eventually set to false.
-    const checkInitialUser = async () => {
-        if (initialAuthProcessed.current) return; // Already handled by onAuthStateChange
-        console.log("AdminPage: checkInitialUser - Running fallback initial user check. Preview Debug.");
-        const {data: { user: initialUser }} = await supabase.auth.getUser();
-        if (!initialUser && !initialAuthProcessed.current) {
-            console.log("AdminPage: checkInitialUser - No initial user and onAuthStateChange hasn't run. Setting loading false. Preview Debug.");
-            setIsLoading(false);
-            initialAuthProcessed.current = true; // Mark as processed
-        } else if (initialUser && !initialAuthProcessed.current) {
-             console.log("AdminPage: checkInitialUser - Found initial user but onAuthStateChange hasn't run. Waiting for onAuthStateChange. Preview Debug.");
-             // onAuthStateChange should pick this up and set loading to false.
-        }
-    };
-    // Give onAuthStateChange a moment to fire first
-    const timer = setTimeout(checkInitialUser, 500);
-
 
     return () => {
       isMounted = false;
-      clearTimeout(timer);
       console.log("AdminPage: useEffect cleanup - Unsubscribing auth listener. Preview Debug.");
       authListener?.subscription.unsubscribe();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Empty dependency array ensures this runs once on mount and cleanup on unmount.
-
-  // Derived state for redirection logic
-  // Redirect only if loading is complete, initial auth has been processed, and there's no user.
-  const shouldRedirectToLogin = !isLoading && initialAuthProcessed.current && !authUser;
+  }, []); // Empty dependency array: runs on mount/unmount. Router is stable.
 
   useEffect(() => {
-    if (shouldRedirectToLogin) {
-      console.log("AdminPage: Derived state indicates redirection to login. isLoading:", isLoading, "initialAuthProcessed:", initialAuthProcessed.current, "authUser:", !!authUser, "Preview Debug.");
+    if (!isLoading && !authUser) {
+      console.log("AdminPage: Redirection effect. isLoading:", isLoading, "authUser:", !!authUser, "Redirecting to /admin/login. Preview Debug.");
       router.push('/admin/login');
     }
-  }, [shouldRedirectToLogin, router, isLoading, authUser]);
+  }, [isLoading, authUser, router]);
 
 
   const allMockOrders = getAllOrders(); 
@@ -129,9 +102,8 @@ export default function AdminPage() {
     );
   }
 
-  if (shouldRedirectToLogin) {
-     // This state is primarily for the visual feedback during the brief moment before redirection.
-     // The actual redirection is handled by the useEffect above.
+  if (!authUser) {
+     console.log("AdminPage: Render - No authUser after loading. Should be redirecting by redirection effect. Preview Debug.");
      return (
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-200px)]">
         <LogIn className="h-12 w-12 text-primary mb-4" />
@@ -140,9 +112,8 @@ export default function AdminPage() {
     );
   }
   
-  // This case: user is authenticated (authUser is not null) but not an admin.
   if (authUser && !isAdmin) {
-    console.log(`AdminPage: Access Denied. User ${authUser.email} is authenticated but NOT an admin. isLoading: ${isLoading}, isAdmin: ${isAdmin}. Preview Debug.`);
+    console.log(`AdminPage: Render - Access Denied. User ${authUser.email} is authenticated but NOT an admin. isAdmin: ${isAdmin}. Preview Debug.`);
     return (
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-200px)] text-center">
         <ShieldAlert className="h-16 w-16 text-destructive mb-4" />
@@ -158,9 +129,8 @@ export default function AdminPage() {
     );
   }
   
-  // This case: user is authenticated AND is an admin.
   if (authUser && isAdmin) {
-    console.log(`AdminPage: Rendering admin panel for ${authUser.email}. isAdmin: ${isAdmin}. isLoading: ${isLoading}. Preview Debug.`);
+    console.log(`AdminPage: Render - Admin panel for ${authUser.email}. isAdmin: ${isAdmin}. Preview Debug.`);
     return (
       <div className="space-y-8">
         <h1 className="text-3xl font-bold font-headline">Admin Panel</h1>
@@ -254,13 +224,11 @@ export default function AdminPage() {
     );
   }
 
-  // Fallback: If not loading, and not explicitly redirecting or rendering content,
-  // this might indicate an unhandled state. Could show a generic loading/error or null.
-  console.log("AdminPage: Reached fallback render. isLoading:", isLoading, "authUser:", !!authUser, "isAdmin:", isAdmin, "initialAuthProcessed:", initialAuthProcessed.current, "Preview Debug.");
+  console.log("AdminPage: Render - Reached fallback render (should be rare). isLoading:", isLoading, "authUser:", !!authUser, "isAdmin:", isAdmin, "Preview Debug.");
   return (
     <div className="flex flex-col items-center justify-center min-h-[calc(100vh-200px)]">
       <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-      <p className="text-muted-foreground">Checking session state...</p>
+      <p className="text-muted-foreground">Verifying session state (Fallback)...</p>
     </div>
   );
 }
