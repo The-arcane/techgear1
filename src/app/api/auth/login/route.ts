@@ -1,17 +1,14 @@
 
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-
-// In a real app, you'd connect to your database here
-// import { connectToDatabase } from '@/lib/mongodb';
-// import bcrypt from 'bcryptjs'; // For password comparison
+// import { supabase } from '@/lib/supabaseClient'; // Not used directly for password auth in this example
 
 const loginSchema = z.object({
   email: z.string().email({ message: "Invalid email address." }),
-  password: z.string().min(1, { message: "Password is required." }), // Min 1 for simplicity, real app min 6+
+  password: z.string().min(1, { message: "Password is required." }),
 });
 
-// --- Mock User Data (Replace with Database) ---
+// --- Mock User Data (Kept for now, will be replaced by Supabase Auth) ---
 const mockUsers = [
   { id: 'admin001', email: 'raunaq.adlakha@gmail.com', password: 'Rahu45$', role: 'admin', name: 'Raunaq Adlakha' },
   { id: 'user001', email: 'user@example.com', password: 'password123', role: 'user', name: 'Test User' },
@@ -29,41 +26,50 @@ export async function POST(request: Request) {
 
     const { email, password } = validation.data;
 
-    // --- Mock Database Interaction & Authentication ---
-    // In a real application, you would:
-    // 1. Connect to your database.
-    // const { db } = await connectToDatabase();
-    // 2. Find the user by email.
-    // const user = await db.collection('users').findOne({ email });
-    // 3. If user found, compare the hashed password.
-    // if (user && await bcrypt.compare(password, user.password)) { ... }
+    // --- Supabase Authentication (Conceptual) ---
+    // In a real application with Supabase, you would use the Supabase client library
+    // on the *client-side* or a server-side auth helper to sign in the user.
+    // The API route might be used for custom logic post-login or for server-side sessions.
+    //
+    // Example client-side login:
+    // const { data, error } = await supabase.auth.signInWithPassword({
+    //   email: 'example@email.com',
+    //   password: 'example-password',
+    // });
+    // if (error) return console.error(error);
+    // // User is logged in, session is managed by Supabase client.
+    //
+    // This API route, for now, will continue to use mock authentication.
+    // --- End Supabase Authentication ---
 
+
+    // --- Mock Authentication (using mockUsers array) ---
     const foundUser = mockUsers.find(u => u.email === email);
 
     if (foundUser && foundUser.password === password) { // Direct password comparison (unsafe for production)
-      // Password matches
       const userToReturn = {
         id: foundUser.id,
         email: foundUser.email,
         name: foundUser.name,
         role: foundUser.role,
       };
-      const mockToken = `mockToken-${foundUser.id}-${Date.now()}`; // Simulate a JWT
+      // In a real Supabase setup, the token comes from the Supabase session.
+      const mockToken = `mockSupabaseToken-${foundUser.id}-${Date.now()}`; 
 
       return NextResponse.json({ 
         success: true, 
-        message: "Login successful.",
+        message: "Login successful (mock).",
         user: userToReturn,
-        token: mockToken 
+        token: mockToken // This would be the Supabase session token in a real app
       }, { status: 200 });
     } else {
-      // User not found or password incorrect
-      return NextResponse.json({ success: false, message: "Invalid email or password." }, { status: 401 });
+      return NextResponse.json({ success: false, message: "Invalid email or password (mock)." }, { status: 401 });
     }
-    // --- End Mock Database Interaction ---
+    // --- End Mock Authentication ---
 
   } catch (error) {
     console.error('API Login Error:', error);
-    return NextResponse.json({ success: false, message: "An unexpected error occurred." }, { status: 500 });
+    const errorMessage = error instanceof Error ? error.message : "An unexpected error occurred.";
+    return NextResponse.json({ success: false, message: errorMessage }, { status: 500 });
   }
 }

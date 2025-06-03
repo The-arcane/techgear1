@@ -1,39 +1,57 @@
+
 import { NextResponse } from 'next/server';
-import { connectToDatabase } from '@/lib/mongodb';
-import type { Product } from '@/lib/types'; // Ensure Product type is correctly defined
+import { supabase } from '@/lib/supabaseClient';
+import type { Product, SupabaseProduct } from '@/lib/types';
+
+// Helper to slugify category names
+const slugify = (text: string) => text.toLowerCase().replace(/\s+/g, '-');
 
 export async function GET() {
   try {
-    const { db } = await connectToDatabase();
-    
-    // Ensure you have a 'products' collection in your MONGODB_DB
-    const productsCollection = db.collection<Product>('products');
-    
-    const products = await productsCollection
-      .find({})
-      .limit(20) // Example: limit to 20 products for initial testing
-      .toArray();
+    const { data, error } = await supabase
+      .from('products')
+      .select('*')
+      .limit(20); // Example: limit to 20 products
 
-    // If using string IDs in your Product type, you might need to map _id from MongoDB
-    // For example: products.map(p => ({ ...p, id: p._id.toString() }))
-    // However, if Product type expects _id as ObjectId or string, adjust accordingly.
+    if (error) {
+      console.error('Supabase API - Failed to fetch products:', error);
+      return NextResponse.json({ message: 'Failed to fetch products from database.', error: error.message }, { status: 500 });
+    }
+
+    // Map SupabaseProduct to our application's Product type
+    const products: Product[] = data 
+      ? data.map((p: SupabaseProduct) => ({
+          id: p.id.toString(), // Ensure ID is a string
+          name: p.name,
+          description: p.description,
+          categorySlug: slugify(p.category), // Derive slug from category name
+          price: p.price,
+          images: [p.image_url], // Use image_url as the primary image
+          specifications: {}, // Placeholder for specifications
+          stock: p.stock,
+        }))
+      : [];
 
     return NextResponse.json({ products }, { status: 200 });
   } catch (error) {
-    console.error('API - Failed to fetch products:', error);
+    console.error('API - Unexpected error fetching products:', error);
     const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
-    return NextResponse.json({ message: 'Failed to fetch products from database.', error: errorMessage }, { status: 500 });
+    return NextResponse.json({ message: 'Failed to fetch products.', error: errorMessage }, { status: 500 });
   }
 }
 
-// Placeholder for POST, to be implemented later for adding products
+// Placeholder for POST, to be implemented later for adding products via Supabase
 // export async function POST(request: Request) {
 //   try {
-//     const { db } = await connectToDatabase();
 //     const productData = await request.json();
 //     // Add validation for productData here using Zod or similar
-//     const result = await db.collection('products').insertOne(productData);
-//     return NextResponse.json({ message: "Product added", productId: result.insertedId }, { status: 201 });
+//     // Map to SupabaseProduct structure before inserting
+//     const { data, error } = await supabase.from('products').insert([productData]).select();
+//     
+//     if (error) {
+//       return NextResponse.json({ message: 'Failed to add product.', error: error.message }, { status: 500 });
+//     }
+//     return NextResponse.json({ message: "Product added", product: data ? data[0] : null }, { status: 201 });
 //   } catch (error) {
 //     console.error('API - Failed to add product:', error);
 //     const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
