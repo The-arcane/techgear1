@@ -48,17 +48,17 @@ export function CheckoutForm() {
     }
     
     const user = authData.user;
-    console.log('User object from Supabase auth.getUser():', JSON.stringify(user, null, 2));
+    console.log('[CheckoutForm] Current authenticated user object from supabase.auth.getUser():', JSON.stringify(user, null, 2));
 
     if (!user || !user.id) {
-      console.warn('Checkout attempt: User not found or user.id is missing. User object:', JSON.stringify(user, null, 2));
+      console.warn('[CheckoutForm] Checkout attempt: User not found or user.id is missing. User object:', JSON.stringify(user, null, 2));
       toast({ title: "Authentication Error", description: "You must be logged in to place an order, or user ID is missing.", variant: "destructive" });
       setIsLoading(false);
       router.push('/login');
       return;
     }
 
-    console.log('Attempting to place order for user ID (auth.users.id):', user.id, 'User email:', user.email);
+    console.log('[CheckoutForm] Attempting to place order for User ID (from auth.users.id):', user.id, 'User email:', user.email);
 
     // Check if a profile exists for this user
     const { data: profileData, error: profileFetchError } = await supabase
@@ -68,14 +68,14 @@ export function CheckoutForm() {
       .maybeSingle();
 
     if (profileFetchError) {
-      console.error('Error fetching user profile:', JSON.stringify(profileFetchError, null, 2));
+      console.error('[CheckoutForm] Error fetching user profile:', JSON.stringify(profileFetchError, null, 2));
       toast({ title: "Profile Check Failed", description: `Could not verify user profile: ${profileFetchError.message}. Please try again.`, variant: "destructive" });
       setIsLoading(false);
       return;
     }
 
     if (!profileData) {
-      console.error(`User profile not found for user ID: ${user.id}. This indicates an issue with account setup (profile not created after signup).`);
+      console.error(`[CheckoutForm] User profile not found for user ID: ${user.id}. This indicates an issue with account setup (profile not created after signup).`);
       toast({
         title: "Account Setup Incomplete",
         description: "Your user profile is not fully set up. This might happen if the signup process didn't complete correctly. Please try signing up again or contact support if the issue persists.",
@@ -86,7 +86,7 @@ export function CheckoutForm() {
       return;
     }
 
-    console.log('User profile confirmed for ID:', user.id);
+    console.log('[CheckoutForm] User profile confirmed for ID:', user.id);
 
     try {
       const orderToInsert: SupabaseOrderInsert = {
@@ -98,7 +98,9 @@ export function CheckoutForm() {
         payment_mode: 'COD', // Default payment_mode from your DB schema
       };
       
-      console.log('Order object being inserted:', JSON.stringify(orderToInsert, null, 2));
+      console.log('[CheckoutForm] Order object being inserted into "orders" table:', JSON.stringify(orderToInsert, null, 2));
+      console.log(`[CheckoutForm] The user_id being inserted is: ${user.id}`);
+
 
       const { data: newOrderData, error: orderError } = await supabase
         .from('orders')
@@ -107,9 +109,12 @@ export function CheckoutForm() {
         .single();
 
       if (orderError || !newOrderData) {
-        console.error('Error creating order. orderError object:', JSON.stringify(orderError, null, 2), 'newOrderData:', newOrderData);
+        console.error('[CheckoutForm] Error creating order. orderError object:', JSON.stringify(orderError, null, 2), 'newOrderData:', newOrderData);
         let description = orderError?.message || "Could not save the order.";
-        if (orderError?.message && orderError.message.includes("orders_user_id_fkey")) {
+        
+        if (orderError?.code === '42501') { // Specific RLS violation code
+            description = `Order placement failed due to a Row Level Security policy on the "orders" table. Please ensure an INSERT policy allows authenticated users to add orders for themselves (i.e., WITH CHECK (auth.uid() = user_id)). Original DB message: ${orderError.message}`;
+        } else if (orderError?.message && orderError.message.includes("orders_user_id_fkey")) {
           description = "Order placement failed: The user's profile was not found. This usually means the database trigger to create a profile automatically when a user signs up is missing, not working, or the current user was created before the trigger was active. Please ensure a profile record exists for your user ID in the 'profiles' table, and check the database trigger setup.";
         } else if (!orderError?.message) {
             description += " Ensure all required fields are correct and columns exist as expected in your 'orders' table.";
@@ -120,7 +125,7 @@ export function CheckoutForm() {
       }
 
       const newOrderId = newOrderData.id;
-      console.log('Order created successfully with ID:', newOrderId);
+      console.log('[CheckoutForm] Order created successfully with ID:', newOrderId);
 
       const orderItemsToInsert: SupabaseOrderItemInsert[] = [];
       let stockUpdateErrorOccurred = false;
@@ -128,7 +133,7 @@ export function CheckoutForm() {
       for (const item of cartItems) {
         const productIdInt = parseInt(item.productId, 10);
         if (isNaN(productIdInt)) {
-            console.error(`Invalid product ID for item ${item.name}: ${item.productId}. Skipping item.`);
+            console.error(`[CheckoutForm] Invalid product ID for item ${item.name}: ${item.productId}. Skipping item.`);
             stockUpdateErrorOccurred = true; 
             continue; 
         }
@@ -147,7 +152,7 @@ export function CheckoutForm() {
           .single();
 
         if (productFetchError || !productData) {
-          console.error(`Error fetching stock for product ID ${productIdInt}:`, JSON.stringify(productFetchError, null, 2));
+          console.error(`[CheckoutForm] Error fetching stock for product ID ${productIdInt}:`, JSON.stringify(productFetchError, null, 2));
           stockUpdateErrorOccurred = true; 
           continue; 
         }
@@ -156,13 +161,13 @@ export function CheckoutForm() {
         const newStock = currentStock - item.quantity;
 
         if (newStock < 0) {
-          console.warn(`Product ID ${productIdInt} stock (${currentStock}) is less than quantity ordered (${item.quantity}). Clamping stock to 0.`);
+          console.warn(`[CheckoutForm] Product ID ${productIdInt} stock (${currentStock}) is less than quantity ordered (${item.quantity}). Clamping stock to 0.`);
           const { error: stockClampError } = await supabase
             .from('products')
             .update({ stock: 0 })
             .eq('id', productIdInt);
           if (stockClampError) {
-            console.error(`Error clamping stock for product ID ${productIdInt}:`, JSON.stringify(stockClampError, null, 2));
+            console.error(`[CheckoutForm] Error clamping stock for product ID ${productIdInt}:`, JSON.stringify(stockClampError, null, 2));
             stockUpdateErrorOccurred = true;
           }
           continue; 
@@ -174,7 +179,7 @@ export function CheckoutForm() {
           .eq('id', productIdInt);
 
         if (stockUpdateDbError) {
-          console.error(`Error updating stock for product ID ${productIdInt}:`, JSON.stringify(stockUpdateDbError, null, 2));
+          console.error(`[CheckoutForm] Error updating stock for product ID ${productIdInt}:`, JSON.stringify(stockUpdateDbError, null, 2));
           stockUpdateErrorOccurred = true; 
         }
       }
@@ -185,14 +190,14 @@ export function CheckoutForm() {
             .insert(orderItemsToInsert);
 
         if (orderItemsError) {
-            console.error('Error creating order items:', JSON.stringify(orderItemsError, null, 2));
+            console.error('[CheckoutForm] Error creating order items:', JSON.stringify(orderItemsError, null, 2));
             toast({ title: "Order Items Failed", description: (orderItemsError as any)?.message || "Could not save order items.", variant: "destructive" });
             await supabase.from('orders').delete().eq('id', newOrderId); // Attempt to rollback order
             setIsLoading(false);
             return;
         }
       } else if (cartItems.length > 0) { 
-          console.error('No valid order items could be prepared. Rolling back order.');
+          console.error('[CheckoutForm] No valid order items could be prepared. Rolling back order.');
           toast({ title: "Order Failed", description: "No items could be processed for the order.", variant: "destructive" });
           await supabase.from('orders').delete().eq('id', newOrderId);
           setIsLoading(false);
@@ -212,7 +217,7 @@ export function CheckoutForm() {
       router.refresh();
 
     } catch (error) {
-      console.error('Checkout process error:', error instanceof Error ? error.message : JSON.stringify(error));
+      console.error('[CheckoutForm] Checkout process error:', error instanceof Error ? error.message : JSON.stringify(error));
       toast({ title: "Checkout Error", description: error instanceof Error ? error.message : "An unexpected error occurred during checkout.", variant: "destructive" });
       setIsLoading(false);
     }
@@ -279,3 +284,4 @@ export function CheckoutForm() {
     </form>
   );
 }
+
