@@ -1,3 +1,4 @@
+
 "use client";
 
 import Link from 'next/link';
@@ -17,7 +18,9 @@ const navLinks = [
   { href: '/category/laptops', label: 'Laptops' },
   { href: '/category/keyboards', label: 'Keyboards' },
   { href: '/category/mice', label: 'Mice' },
-  // Add more categories as needed
+  { href: '/category/mobile-chargers', label: 'Chargers' },
+  { href: '/category/earphones', label: 'Earphones' },
+  { href: '/category/accessories', label: 'Accessories' },
 ];
 
 export function Header() {

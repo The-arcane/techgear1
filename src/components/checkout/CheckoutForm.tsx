@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, type FormEvent } from 'react';
@@ -20,7 +21,7 @@ export function CheckoutForm() {
     address: '',
     city: '',
     postalCode: '',
-    country: 'USA', // Default country
+    country: 'India', // Default country
   });
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -105,7 +106,7 @@ export function CheckoutForm() {
         <CardFooter className="flex flex-col items-stretch gap-4">
            <div className="text-xl font-semibold flex justify-between w-full">
               <span>Order Total:</span>
-              <span>${getCartTotal().toFixed(2)}</span>
+              <span>₹{getCartTotal().toFixed(2)}</span>
             </div>
           <Button type="submit" size="lg" className="w-full" disabled={isLoading || cartItems.length === 0}>
             {isLoading ? 'Placing Order...' : 'Place Order (COD)'}

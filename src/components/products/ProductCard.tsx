@@ -1,3 +1,4 @@
+
 import Link from 'next/link';
 import Image from 'next/image';
 import type { Product } from '@/lib/types';
@@ -36,7 +37,7 @@ export function ProductCard({ product }: ProductCardProps) {
           {product.description.substring(0, 60)}...
         </p>
         <p className="text-xl font-semibold text-primary">
-          ${product.price.toFixed(2)}
+          ₹{product.price.toFixed(2)}
         </p>
       </CardContent>
       <CardFooter className="p-4 border-t">

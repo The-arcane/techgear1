@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useCart } from '@/contexts/CartContext';
@@ -46,7 +47,7 @@ export function CartView() {
         <CardContent className="space-y-4">
           <div className="flex justify-between text-muted-foreground">
             <span>Subtotal</span>
-            <span>${getCartTotal().toFixed(2)}</span>
+            <span>₹{getCartTotal().toFixed(2)}</span>
           </div>
           <div className="flex justify-between text-muted-foreground">
             <span>Shipping</span>
@@ -55,7 +56,7 @@ export function CartView() {
           <hr />
           <div className="flex justify-between font-semibold text-lg">
             <span>Total</span>
-            <span>${getCartTotal().toFixed(2)}</span>
+            <span>₹{getCartTotal().toFixed(2)}</span>
           </div>
         </CardContent>
         <CardFooter>

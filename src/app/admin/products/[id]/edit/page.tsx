@@ -1,3 +1,4 @@
+
 "use client"; // This will be a client component due to form interactions
 
 import { useState, useEffect } from 'react';
@@ -127,7 +128,7 @@ export default function EditProductPage({ params }: EditProductPageProps) {
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="price">Price ($)</Label>
+                <Label htmlFor="price">Price (₹)</Label>
                 <Input id="price" name="price" type="number" step="0.01" value={formData.price} onChange={handleChange} required disabled={isLoading} />
               </div>
               <div className="space-y-2">

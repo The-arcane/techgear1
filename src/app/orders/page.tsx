@@ -1,3 +1,4 @@
+
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -18,19 +19,19 @@ const getUserOrders = async (): Promise<Order[]> => {
   return [
     { 
       id: "TG-123456", userId: "user1", 
-      items: [{ productId: "laptop-x1", name: "UltraBook X1", price: 1299.99, quantity: 1, image: "https://placehold.co/600x400.png", stock: 10 }], 
-      totalAmount: 1299.99, status: "Delivered", orderDate: new Date(Date.now() - 1000*60*60*24*5).toISOString(), // 5 days ago
-      shippingAddress: { fullName: "John Doe", address: "123 Main St", city: "Anytown", postalCode: "12345", country: "USA"},
+      items: [{ productId: "logitech-mx-master-3", name: "Logitech MX Master 3 Mouse", price: 7999, quantity: 1, image: "https://placehold.co/600x400.png", stock: 10 }], 
+      totalAmount: 7999, status: "Delivered", orderDate: new Date(Date.now() - 1000*60*60*24*5).toISOString(), // 5 days ago
+      shippingAddress: { fullName: "John Doe", address: "123 Main St", city: "Anytown", postalCode: "12345", country: "India"},
       paymentMethod: "COD"
     },
     { 
       id: "TG-789012", userId: "user1", 
       items: [
-        { productId: "mech-keyboard-k10", name: "MechKey K10 Pro", price: 159.50, quantity: 1, image: "https://placehold.co/600x400.png", stock: 10 },
-        { productId: "gaming-mouse-m500", name: "ProGamer M500", price: 79.00, quantity: 1, image: "https://placehold.co/600x400.png", stock: 10 }
+        { productId: "apple-magic-keyboard", name: "Apple Magic Keyboard", price: 9500, quantity: 1, image: "https://placehold.co/600x400.png", stock: 10 },
+        { productId: "anker-usbc-charger", name: "Anker USB-C Charger", price: 1299, quantity: 1, image: "https://placehold.co/600x400.png", stock: 10 }
       ], 
-      totalAmount: 238.50, status: "Shipped", orderDate: new Date(Date.now() - 1000*60*60*24*2).toISOString(), // 2 days ago
-      shippingAddress: { fullName: "John Doe", address: "123 Main St", city: "Anytown", postalCode: "12345", country: "USA"},
+      totalAmount: 10799, status: "Shipped", orderDate: new Date(Date.now() - 1000*60*60*24*2).toISOString(), // 2 days ago
+      shippingAddress: { fullName: "John Doe", address: "123 Main St", city: "Anytown", postalCode: "12345", country: "India"},
       paymentMethod: "COD"
     },
   ];
@@ -105,7 +106,7 @@ export default async function OrdersPage() {
                         {order.status}
                       </span>
                     </TableCell>
-                    <TableCell className="text-right">${order.totalAmount.toFixed(2)}</TableCell>
+                    <TableCell className="text-right">₹{order.totalAmount.toFixed(2)}</TableCell>
                     <TableCell className="text-center">
                       <Link href={`/orders/${order.id}`}> {/* Placeholder for individual order detail page */}
                         <Button variant="outline" size="sm">View Details</Button>

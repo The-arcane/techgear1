@@ -1,3 +1,4 @@
+
 import Image from 'next/image';
 import { getProductById, products as allProducts } from '@/lib/data'; // Using allProducts for generateStaticParams
 import { AddToCartButton } from '@/components/products/AddToCartButton';
@@ -119,7 +120,7 @@ export default function ProductPage({ params }: ProductPageProps) {
               </CardDescription>
               
               <div className="mb-6">
-                <span className="text-4xl font-bold text-primary">${product.price.toFixed(2)}</span>
+                <span className="text-4xl font-bold text-primary">₹{product.price.toFixed(2)}</span>
               </div>
 
               <div className="mb-6">

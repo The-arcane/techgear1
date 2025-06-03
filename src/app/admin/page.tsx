@@ -1,3 +1,4 @@
+
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
@@ -76,9 +77,9 @@ export default function AdminPage() {
       <div className="mt-8 p-4 bg-secondary/50 rounded-lg">
         <h2 className="text-xl font-semibold mb-2">Quick Stats (Placeholder)</h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-            <div><p className="text-2xl font-bold">120</p><p className="text-sm text-muted-foreground">Total Products</p></div>
+            <div><p className="text-2xl font-bold">10</p><p className="text-sm text-muted-foreground">Total Products</p></div>
             <div><p className="text-2xl font-bold">58</p><p className="text-sm text-muted-foreground">Pending Orders</p></div>
-            <div><p className="text-2xl font-bold">$5,670</p><p className="text-sm text-muted-foreground">Revenue (Month)</p></div>
+            <div><p className="text-2xl font-bold">₹56,700</p><p className="text-sm text-muted-foreground">Revenue (Month)</p></div>
             <div><p className="text-2xl font-bold">350</p><p className="text-sm text-muted-foreground">Registered Users</p></div>
         </div>
       </div>

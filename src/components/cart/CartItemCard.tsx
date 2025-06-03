@@ -1,3 +1,4 @@
+
 "use client";
 
 import Image from 'next/image';
@@ -36,7 +37,7 @@ export function CartItemCard({ item }: CartItemCardProps) {
         <Link href={`/products/${item.productId}`}>
           <h3 className="font-medium hover:text-primary transition-colors">{item.name}</h3>
         </Link>
-        <p className="text-sm text-muted-foreground">${item.price.toFixed(2)}</p>
+        <p className="text-sm text-muted-foreground">₹{item.price.toFixed(2)}</p>
       </div>
       <div className="flex items-center space-x-2">
         <Button variant="outline" size="icon" onClick={() => handleQuantityChange(item.quantity - 1)} disabled={item.quantity <= 1}>
@@ -71,7 +72,7 @@ export function CartItemCard({ item }: CartItemCardProps) {
         </Button>
       </div>
       <div className="text-right font-medium w-24">
-        ${(item.price * item.quantity).toFixed(2)}
+        ₹{(item.price * item.quantity).toFixed(2)}
       </div>
       <Button variant="ghost" size="icon" onClick={() => removeFromCart(item.productId)} aria-label="Remove item">
         <X className="h-5 w-5 text-muted-foreground hover:text-destructive" />
