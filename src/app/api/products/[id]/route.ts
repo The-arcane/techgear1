@@ -5,6 +5,7 @@ import type { Product, SupabaseProduct } from '@/lib/types';
 
 // Helper to slugify category names (consistent with the all products route)
 const slugify = (text: string) => text.toLowerCase().replace(/\s+/g, '-');
+const DEFAULT_PLACEHOLDER_IMAGE = 'https://placehold.co/600x400.png';
 
 export async function GET(request: Request, { params }: { params: { id: string } }) {
   const { id } = params;
@@ -14,10 +15,16 @@ export async function GET(request: Request, { params }: { params: { id: string }
   }
 
   try {
+    // Supabase product ID is an integer, so parse the param
+    const productId = parseInt(id, 10);
+    if (isNaN(productId)) {
+      return NextResponse.json({ message: 'Invalid Product ID format.' }, { status: 400 });
+    }
+
     const { data: productData, error } = await supabase
       .from('products')
       .select('*')
-      .eq('id', parseInt(id, 10)) // Assuming product ID in DB is integer
+      .eq('id', productId)
       .single();
 
     if (error) {
@@ -40,7 +47,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
       description: typedProductData.description,
       categorySlug: slugify(typedProductData.category),
       price: typedProductData.price,
-      images: [typedProductData.image_url],
+      images: [typedProductData.image_url || DEFAULT_PLACEHOLDER_IMAGE], // Use image_url or fallback
       specifications: {}, // Placeholder
       stock: typedProductData.stock,
     };
