@@ -33,11 +33,12 @@ export function LoginForm() {
       toast({ title: "Login Failed", description: error.message, variant: "destructive" });
     } else if (data.user && data.session) {
       toast({ title: "Login Successful", description: "Welcome back!" });
-      console.log("Login successful in LoginForm. User ID:", data.user.id, "Session:", !!data.session, "Navigating to / and refreshing.");
-      router.push('/');
-      router.refresh();
+      console.log("LOGINFORM: Client-side session after login:", JSON.stringify(data.session, null, 2));
+      console.log("LOGINFORM: Client-side user after login:", JSON.stringify(data.user, null, 2));
+      console.log("LOGINFORM: Login successful. Navigating to /orders and refreshing router state.");
+      router.push('/orders'); // Redirect directly to order history
+      router.refresh(); // Crucial to update server-side auth state
     } else {
-      // This case might occur if Supabase returns no error but also no user/session, which is unusual for signInWithPassword
       toast({ title: "Login Failed", description: "Invalid email or password, or an unexpected issue occurred.", variant: "destructive" });
     }
   };
