@@ -5,7 +5,7 @@ import { useEffect, useState, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { PackagePlus, ListOrdered, Settings, Users, LayoutGrid, Loader2, ShieldAlert, LogIn, ShoppingBasket, Clock, CheckCircle } from "lucide-react";
+import { PackagePlus, ListOrdered, Settings, Users, LayoutGrid, Loader2, ShieldAlert, LogIn, ShoppingBasket, Clock, CheckCircle, Activity } from "lucide-react";
 import type { OrderStatus } from "@/lib/types";
 import { supabase } from '@/lib/supabaseClient';
 import { useRouter } from 'next/navigation';
@@ -14,7 +14,7 @@ import type { User as AuthUserType } from '@supabase/supabase-js';
 interface StoreStats {
   totalProducts: number;
   totalOrders: number;
-  pendingOrders: number;
+  pendingOrders: number; // This will now be calculated
   completedOrders: number;
 }
 
@@ -71,16 +71,7 @@ export default function AdminPage() {
       console.log(`[AdminPage] fetchStoreStats: Total orders query took ${Date.now() - ordersQueryStartTime}ms. Raw ordersCount: ${ordersCount}. Error:`, ordersError);
       if (ordersError) throw new Error(`Total orders fetch error: ${ordersError.message}`);
       
-      console.log("[AdminPage] fetchStoreStats: Fetching pending orders...");
-      const pendingQueryStartTime = Date.now();
-      const { count: pendingOrdersCount, error: pendingError } = await supabase
-        .from('orders')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'Pending' as OrderStatus);
-      console.log(`[AdminPage] fetchStoreStats: Pending orders query took ${Date.now() - pendingQueryStartTime}ms. Raw pendingOrdersCount: ${pendingOrdersCount}. Error:`, pendingError);
-      if (pendingError) throw new Error(`Pending orders fetch error: ${pendingError.message}`);
-
-      console.log("[AdminPage] fetchStoreStats: Fetching completed orders...");
+      console.log("[AdminPage] fetchStoreStats: Fetching completed orders (status 'Delivered')...");
       const completedQueryStartTime = Date.now();
       const { count: completedOrdersCount, error: completedError } = await supabase
         .from('orders')
@@ -90,11 +81,15 @@ export default function AdminPage() {
       if (completedError) throw new Error(`Completed orders fetch error: ${completedError.message}`);
       
       if (isMounted.current) {
+        const total = ordersCount || 0;
+        const completed = completedOrdersCount || 0;
+        const pending = total - completed;
+
         const newStats = {
           totalProducts: productsCount || 0,
-          totalOrders: ordersCount || 0,
-          pendingOrders: pendingOrdersCount || 0,
-          completedOrders: completedOrdersCount || 0,
+          totalOrders: total,
+          pendingOrders: pending < 0 ? 0 : pending, // Ensure pending is not negative
+          completedOrders: completed,
         };
         setStoreStats(newStats);
         console.log("[AdminPage] fetchStoreStats: Stats updated in state.", newStats);
@@ -182,10 +177,10 @@ export default function AdminPage() {
       if (!isEffectSubscribed || !isMounted.current) return;
       console.log("[AdminPage] Auth useEffect: onAuthStateChange event:", event, "Session User ID:", session?.user?.id || "None");
       
-      const wasLoadingAuth = isLoadingAuth;
+      // const wasLoadingAuth = isLoadingAuth; // Not needed if initialAuthCheckDone handles it
       await checkAdminStatusAndSetUser(session?.user ?? null);
       
-      if (isEffectSubscribed && isMounted.current && !initialAuthCheckDone.current && wasLoadingAuth) {
+      if (isEffectSubscribed && isMounted.current && !initialAuthCheckDone.current /*&& wasLoadingAuth*/) {
           setIsLoadingAuth(false);
           initialAuthCheckDone.current = true;
           console.log("[AdminPage] Auth useEffect: Initial auth confirmation via onAuthStateChange. isLoadingAuth set to false.");
@@ -201,7 +196,7 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (isMounted.current && isAdmin && authUser && !isLoadingAuth) {
-      console.log("[AdminPage] Stats useEffect: isAdmin is true, authUser exists, not loading auth. Calling fetchStoreStats.");
+      console.log("[AdminPage] Stats useEffect: Conditions met (isAdmin, authUser, !isLoadingAuth). Calling fetchStoreStats.");
       fetchStoreStats();
     } else if (isMounted.current && !isLoadingAuth) { 
       console.log("[AdminPage] Stats useEffect: Conditions NOT met for fetching stats (isAdmin:", isAdmin, ", authUser:", !!authUser, ", isLoadingAuth:", isLoadingAuth, ")");
@@ -383,6 +378,8 @@ export default function AdminPage() {
     );
   }
 
+  // Fallback loading state if none of the above conditions are met
+  // This usually means isLoadingAuth is true, or authUser is null but not yet redirected.
   return (
     <div className="flex flex-col items-center justify-center min-h-[calc(100vh-200px)]">
       <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
@@ -390,4 +387,6 @@ export default function AdminPage() {
     </div>
   );
 }
+    
+
     
