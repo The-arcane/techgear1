@@ -12,7 +12,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 
 export function AdminLoginForm() {
-  const [email, setEmail] = useState('raunaq.admin@gmail.com'); // Updated pre-fill
+  const [email, setEmail] = useState('raunaq.admin@gmail.com');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
@@ -36,7 +36,8 @@ export function AdminLoginForm() {
     }
 
     if (authData.user && authData.session) {
-      console.log('[AdminLoginForm] signInWithPassword successful. User ID:', authData.user.id, "Preview Environment");
+      console.log('[AdminLoginForm] signInWithPassword successful. User ID from authData.user.id:', authData.user.id, "Preview Environment");
+      
       // Immediately check session persistence
       const { data: { user: immediateUser }, error: immediateError } = await supabase.auth.getUser();
       if (immediateError) {
@@ -47,6 +48,7 @@ export function AdminLoginForm() {
         console.warn('[AdminLoginForm] Immediate getUser after signIn returned NO USER. Session likely not persisted in Preview Environment.');
       }
 
+      console.log('[AdminLoginForm] Checking admin status for user ID:', authData.user.id, "Preview Environment");
       // Check if the user is in the 'admins' table
       const { data: adminData, error: adminCheckError } = await supabase
         .from('admins')
@@ -54,22 +56,25 @@ export function AdminLoginForm() {
         .eq('id', authData.user.id)
         .maybeSingle();
 
+      console.log('[AdminLoginForm] Admin check query result - adminData:', JSON.stringify(adminData), "Preview Environment");
+      console.log('[AdminLoginForm] Admin check query result - adminCheckError:', JSON.stringify(adminCheckError), "Preview Environment");
+      
       setIsLoading(false);
 
       if (adminCheckError) {
         console.error("[AdminLoginForm] Error checking admin table:", adminCheckError.message, "Preview Environment");
         await supabase.auth.signOut(); // Sign out as a precaution
-        toast({ title: "Login Error", description: "Could not verify admin status. Please try again.", variant: "destructive" });
+        toast({ title: "Login Error", description: `Could not verify admin status: ${adminCheckError.message}. Please try again.`, variant: "destructive" });
         return;
       }
 
-      if (adminData) { // If adminData is not null, user is an admin
-        console.log('[AdminLoginForm] User is admin. Redirecting to /admin. Preview Environment');
+      if (adminData) { // If adminData is not null (i.e., { id: 'the-uuid' }), user is an admin
+        console.log('[AdminLoginForm] User IS an admin. adminData:', JSON.stringify(adminData), '. Redirecting to /admin. Preview Environment');
         toast({ title: "Admin Login Successful", description: "Redirecting to admin panel..." });
         router.push('/admin');
         router.refresh(); 
       } else {
-        console.warn('[AdminLoginForm] User is NOT an admin. Signing out. User ID checked:', authData.user.id, 'Preview Environment');
+        console.warn('[AdminLoginForm] User is NOT an admin (adminData is null or undefined, and no adminCheckError). User ID checked:', authData.user.id, 'Signing out. Preview Environment');
         await supabase.auth.signOut(); 
         toast({ title: "Login Failed", description: "Not an authorized admin account.", variant: "destructive" });
       }
