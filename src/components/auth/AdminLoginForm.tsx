@@ -10,9 +10,7 @@ import Link from "next/link";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from 'next/navigation';
 
-// import { loginUser } from "@/lib/actions/auth.actions"; // Placeholder for server action
-
-export function LoginForm() {
+export function AdminLoginForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -23,24 +21,16 @@ export function LoginForm() {
     e.preventDefault();
     setIsLoading(true);
 
-    // Placeholder for general user login
-    // const result = await loginUser({ email, password });
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    // Simulate a generic user login attempt
-    if (typeof window !== 'undefined') {
-        localStorage.setItem('isAuthenticated', 'true'); // Simulate successful general login
-        localStorage.removeItem('isAdmin'); // Ensure isAdmin is cleared for non-admin logins
-    }
-    // For demo purposes, let's assume general login is successful and redirects to home.
-    // In a real app, this would involve backend validation.
-    const result = { success: true, message: "Logged in successfully! (mock)" };
-
-
-    if (result.success) {
-      toast({ title: "Login Successful", description: "Welcome back!" });
-      router.push('/'); // Redirect general users to homepage
+    // Admin credentials check
+    if (email === 'raunaq.adlakha@gmail.com' && password === 'Rahu45$') {
+      toast({ title: "Admin Login Successful", description: "Redirecting to admin panel..." });
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('isAdmin', 'true');
+        localStorage.setItem('isAuthenticated', 'true'); // Also set general auth for consistency
+      }
+      router.push('/admin');
     } else {
-      toast({ title: "Login Failed", description: result.message, variant: "destructive" });
+      toast({ title: "Admin Login Failed", description: "Invalid credentials for admin access.", variant: "destructive" });
     }
     setIsLoading(false);
   };
@@ -48,8 +38,8 @@ export function LoginForm() {
   return (
     <Card className="w-full max-w-md mx-auto">
       <CardHeader>
-        <CardTitle className="text-2xl font-headline">Login to TechGear</CardTitle>
-        <CardDescription>Enter your credentials to access your account.</CardDescription>
+        <CardTitle className="text-2xl font-headline">Admin Panel Login</CardTitle>
+        <CardDescription>Enter your administrator credentials.</CardDescription>
       </CardHeader>
       <form onSubmit={handleSubmit}>
         <CardContent className="space-y-4">
@@ -58,7 +48,7 @@ export function LoginForm() {
             <Input
               id="email"
               type="email"
-              placeholder="you@example.com"
+              placeholder="admin@example.com"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -79,18 +69,12 @@ export function LoginForm() {
         </CardContent>
         <CardFooter className="flex flex-col gap-4">
           <Button type="submit" className="w-full" disabled={isLoading}>
-            {isLoading ? 'Logging in...' : 'Login'}
+            {isLoading ? 'Logging in...' : 'Login as Admin'}
           </Button>
           <p className="text-sm text-center text-muted-foreground">
-            Don&apos;t have an account?{" "}
-            <Link href="/signup" className="font-medium text-primary hover:underline">
-              Sign up
-            </Link>
-          </p>
-          <p className="text-sm text-center text-muted-foreground mt-2">
-            Are you an administrator?{" "}
-            <Link href="/admin/login" className="font-medium text-primary hover:underline">
-              Admin Login
+            Not an admin?{" "}
+            <Link href="/login" className="font-medium text-primary hover:underline">
+              User Login
             </Link>
           </p>
         </CardFooter>
