@@ -8,8 +8,10 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { useCart } from '@/contexts/CartContext';
 import { useToast } from '@/hooks/use-toast';
-import type { ShippingAddress } from '@/lib/types';
+import type { ShippingAddress, Order, CartItem } from '@/lib/types';
 import { useRouter } from 'next/navigation'; // For redirection
+import { addOrder as saveMockOrder, updateProductStock as updateMockProductStock } from '@/lib/data'; // Import mock data functions
+import { supabase } from '@/lib/supabaseClient'; // For getting current user
 
 export function CheckoutForm() {
   const { cartItems, getCartTotal, clearCart } = useCart();
@@ -37,24 +39,49 @@ export function CheckoutForm() {
     }
     setIsLoading(true);
 
+    // Get current user for order
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+        toast({ title: "Authentication Error", description: "You must be logged in to place an order.", variant: "destructive" });
+        setIsLoading(false);
+        router.push('/login');
+        return;
+    }
+
     // Simulate order placement
-    console.log("Placing order with:", { shippingAddress, cartItems, total: getCartTotal() });
-    await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate API call
+    console.log("Placing order with:", { shippingAddress, cartItems, total: getCartTotal(), userId: user.id });
+    await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API call delay
 
-    // This would be an actual API call in a real app
-    // const orderId = await placeOrderAction({ shippingAddress, items: cartItems, totalAmount: getCartTotal() });
+    const orderId = `TG-${Date.now().toString().slice(-6)}`; // Mock order ID
 
-    const mockOrderId = `TG-${Date.now().toString().slice(-6)}`; // Mock order ID
+    const newOrder: Order = {
+      id: orderId,
+      userId: user.id, // Use actual user ID
+      userEmail: user.email,
+      items: cartItems.map(item => ({ ...item })), // Ensure deep copy of items
+      totalAmount: getCartTotal(),
+      status: 'Processing', // Initial status
+      orderDate: new Date().toISOString(),
+      shippingAddress: { ...shippingAddress }, // Ensure deep copy
+      paymentMethod: 'COD',
+    };
 
-    toast({ title: "Order Placed!", description: `Your order #${mockOrderId} has been successfully placed via Cash on Delivery.` });
-    clearCart();
+    // "Save" order to mock data
+    saveMockOrder(newOrder);
+
+    // "Update" stock in mock data
+    for (const item of cartItems) {
+      updateMockProductStock(item.productId, item.quantity);
+    }
+
+    toast({ title: "Order Placed!", description: `Your order #${orderId} has been successfully placed.` });
+    clearCart(); // This will also trigger a toast "Cart cleared", which is fine for now or can be made conditional
     setIsLoading(false);
-    router.push(`/order-confirmation/${mockOrderId}`); // Redirect to a confirmation page
+    router.push(`/order-confirmation/${orderId}`);
+    router.refresh(); // Refresh server components to reflect new order in history
   };
 
   if (cartItems.length === 0 && !isLoading) {
-     // This case should ideally be handled by redirecting from cart page if empty,
-     // but as a fallback:
     return (
         <div className="text-center py-10">
             <p className="text-muted-foreground">Your cart is empty. Please add items before proceeding to checkout.</p>
@@ -78,9 +105,12 @@ export function CheckoutForm() {
               <Input id="fullName" name="fullName" required value={shippingAddress.fullName} onChange={handleInputChange} disabled={isLoading} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="address">Street Address</Label>
-              <Input id="address" name="address" required value={shippingAddress.address} onChange={handleInputChange} disabled={isLoading} />
+              {/* Placeholder for email if needed, usually tied to account */}
             </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="address">Street Address</Label>
+            <Input id="address" name="address" required value={shippingAddress.address} onChange={handleInputChange} disabled={isLoading} />
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="space-y-2">

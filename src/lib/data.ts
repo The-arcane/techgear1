@@ -1,5 +1,5 @@
 
-import type { Category, Product, Order, OrderStatus } from './types';
+import type { Category, Product, Order, OrderStatus, CartItem } from './types';
 
 export const categories: Category[] = [
   {
@@ -39,7 +39,7 @@ export const categories: Category[] = [
   },
 ];
 
-export const products: Product[] = [
+export let products: Product[] = [
   {
     id: 'logitech-mx-master-3',
     name: 'Logitech MX Master 3 Mouse',
@@ -142,7 +142,8 @@ export const products: Product[] = [
   }
 ];
 
-export const orders: Order[] = [
+// Let's make orders mutable for the mock simulation
+export let orders: Order[] = [
   { 
     id: "TG-123456", userId: "user1", userEmail: "customer1@example.com",
     items: [{ productId: "logitech-mx-master-3", name: "Logitech MX Master 3 Mouse", price: 7999, quantity: 1, image: "https://i.postimg.cc/YSHXFDyX/Logitech-MX-Master-3-S-1200x1200.jpg", stock: 10 }], 
@@ -203,7 +204,7 @@ export const getAllOrders = (): Order[] => {
 
 // Mock function to get orders for a specific user
 export const getUserOrders = (userId: string): Order[] => {
-  return orders.filter(order => order.userId === userId);
+  return orders.filter(order => order.userId === userId).sort((a,b) => new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime());
 };
 
 // Mock function to get a specific order by ID
@@ -216,9 +217,33 @@ export const updateOrderStatus = (orderId: string, status: OrderStatus): boolean
   const orderIndex = orders.findIndex(order => order.id === orderId);
   if (orderIndex !== -1) {
     orders[orderIndex].status = status;
-    console.log(`Order ${orderId} status updated to ${status} (mock)`);
+    console.log(`Mock: Order ${orderId} status updated to ${status}`);
     return true; // Simulate success
   }
+  console.log(`Mock: Order ${orderId} not found for status update.`);
   return false; // Simulate failure (order not found)
 };
 
+// Mock function to "add" an order to the in-memory array
+export const addOrder = (newOrder: Order): void => {
+  orders.unshift(newOrder); // Add to the beginning to show newest first
+  console.log(`Mock: Order ${newOrder.id} added to mock data.`);
+};
+
+// Mock function to update product stock in the in-memory array
+export const updateProductStock = (productId: string, quantitySold: number): boolean => {
+  const productIndex = products.findIndex(p => p.id === productId);
+  if (productIndex !== -1) {
+    const newStock = products[productIndex].stock - quantitySold;
+    if (newStock < 0) {
+      console.warn(`Mock: Product ${productId} stock cannot go below 0. Setting to 0.`);
+      products[productIndex].stock = 0;
+    } else {
+      products[productIndex].stock = newStock;
+    }
+    console.log(`Mock: Product ${productId} stock updated to ${products[productIndex].stock}. Sold: ${quantitySold}`);
+    return true;
+  }
+  console.warn(`Mock: Product ${productId} not found for stock update.`);
+  return false;
+};
