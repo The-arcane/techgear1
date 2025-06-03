@@ -9,6 +9,7 @@ import type { Metadata } from 'next';
 import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
+import type { Database } from '@/lib/database.types';
 
 export const metadata: Metadata = {
   title: 'My Orders | TechGear',
@@ -16,13 +17,21 @@ export const metadata: Metadata = {
 };
 
 export default async function OrdersPage() {
-  const cookieStore = cookies();
+  const cookieStore = cookies(); // Keep this to log all cookies
   console.log('[OrdersPage] All cookies visible to server component:', JSON.stringify(cookieStore.getAll(), null, 2));
   
-  const supabase = createServerComponentClient({ cookies: () => cookieStore });
+  const supabase = createServerComponentClient<Database>(
+    { cookies }, // Pass the cookies function directly
+    {
+      supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      supabaseKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    }
+  );
 
   console.log('[OrdersPage] Attempting to get user session...');
   const { data: { user }, error: authError } = await supabase.auth.getUser();
+  
+  console.log('[OrdersPage] User object from supabase.auth.getUser():', JSON.stringify(user, null, 2));
   
   if (authError) {
     console.error(
@@ -32,8 +41,6 @@ export default async function OrdersPage() {
       'Full Error:', JSON.stringify(authError, null, 2)
     );
   }
-  console.log('[OrdersPage] User object from supabase.auth.getUser():', JSON.stringify(user, null, 2));
-
 
   if (authError || !user) {
     console.log('[OrdersPage] Auth error or no user found, redirecting to login. AuthError:', !!authError, 'User:', !!user);
@@ -44,7 +51,7 @@ export default async function OrdersPage() {
   const { data: ordersData, error: ordersFetchError } = await supabase
     .from('orders')
     .select('*')
-    .eq('user_id', user.id) // This correctly uses the authenticated user's ID
+    .eq('user_id', user.id)
     .order('created_at', { ascending: false });
 
   if (ordersFetchError) {
@@ -60,11 +67,11 @@ export default async function OrdersPage() {
   }
   
   const orders: Order[] = ordersData?.map((dbOrder: SupabaseOrderFetched) => ({
-    id: dbOrder.id.toString(), // Using Supabase integer ID as string for app consistency
+    id: dbOrder.id.toString(),
     db_id: dbOrder.id,
     userId: dbOrder.user_id || '', 
-    userEmail: dbOrder.user_email, // This comes from orders.user_email
-    items: [], // Items are not fetched for the list view to keep it light
+    userEmail: dbOrder.user_email,
+    items: [], 
     totalAmount: dbOrder.total_amount,
     status: dbOrder.status as OrderStatus || 'Pending',
     orderDate: dbOrder.created_at,

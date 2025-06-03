@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { UserCircle, Mail, Phone, MapPin, Edit3, AlertTriangle } from 'lucide-react';
 import type { SupabaseProfile } from '@/lib/types';
+import type { Database } from '@/lib/database.types';
 
 export const metadata: Metadata = {
   title: 'My Profile | TechGear',
@@ -15,13 +16,21 @@ export const metadata: Metadata = {
 };
 
 export default async function ProfilePage() {
-  const cookieStore = cookies();
+  const cookieStore = cookies(); // Keep this to log all cookies
   console.log('[ProfilePage] All cookies visible to server component:', JSON.stringify(cookieStore.getAll(), null, 2));
 
-  const supabase = createServerComponentClient({ cookies: () => cookieStore });
+  const supabase = createServerComponentClient<Database>(
+    { cookies }, // Pass the cookies function directly
+    {
+      supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      supabaseKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    }
+  );
 
   console.log('[ProfilePage] Attempting to get user session...');
   const { data: { user }, error: authUserError } = await supabase.auth.getUser();
+
+  console.log('[ProfilePage] User object from supabase.auth.getUser():', JSON.stringify(user, null, 2));
 
   if (authUserError) {
     console.error(
@@ -31,10 +40,9 @@ export default async function ProfilePage() {
       'Full Error:', JSON.stringify(authUserError, null, 2)
     );
   }
-  console.log('[ProfilePage] User object from supabase.auth.getUser():', JSON.stringify(user, null, 2));
-
-  if (!user) {
-    console.log('[ProfilePage] No user found, redirecting to login.');
+  
+  if (authUserError || !user) {
+    console.log('[ProfilePage] No user found or auth error, redirecting to login.');
     redirect('/login?message=Please login to view your profile.');
   }
 
@@ -45,7 +53,7 @@ export default async function ProfilePage() {
     .eq('id', user.id)
     .single<SupabaseProfile>();
 
-  if (profileError && profileError.code !== 'PGRST116') { // PGRST116 means no rows found
+  if (profileError && profileError.code !== 'PGRST116') { 
     console.error("[ProfilePage] Error fetching profile:", JSON.stringify(profileError, null, 2));
     return (
       <div className="text-center py-12">
@@ -58,15 +66,14 @@ export default async function ProfilePage() {
   }
   
   if (!profile) {
-    console.warn(`[ProfilePage] Profile not found for user ID: ${user.id}. This usually means the profile was not created after signup.`);
-    // This could also be a point where we redirect to a "complete profile" page if desired
+    console.warn(`[ProfilePage] Profile not found for user ID: ${user.id}. This usually means the profile was not created after signup (database trigger issue).`);
     return (
       <div className="text-center py-12">
         <UserCircle className="mx-auto h-16 w-16 text-muted-foreground mb-4" />
         <h1 className="text-3xl font-bold mb-2">Profile Not Found</h1>
         <p className="text-muted-foreground mb-6">
           We couldn't find a profile associated with your account. 
-          This might happen if your account setup wasn't fully completed (e.g., database trigger for profile creation failed).
+          Please ensure your account setup was fully completed (e.g., a database trigger should create a profile upon signup).
         </p>
         <Link href="/">
             <Button variant="outline">Back to Home</Button>

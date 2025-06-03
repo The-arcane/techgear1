@@ -10,13 +10,20 @@ import type { Metadata } from 'next';
 import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
+import type { Database } from '@/lib/database.types';
 
 type UserOrderDetailPageProps = {
-  params: { id: string }; // The order ID from the URL, which is the DB integer ID as string
+  params: { id: string }; 
 };
 
 async function getOrderDetailsFromSupabase(orderIdNum: number, userId: string): Promise<Order | null> {
-  const supabase = createServerComponentClient({ cookies });
+  const supabase = createServerComponentClient<Database>(
+    { cookies }, // Pass cookies function directly
+    {
+      supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      supabaseKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    }
+  );
   console.log(`[getOrderDetailsFromSupabase] Fetching order ID: ${orderIdNum} for user ID: ${userId}`);
 
   const { data: orderData, error: orderError } = await supabase
@@ -32,7 +39,7 @@ async function getOrderDetailsFromSupabase(orderIdNum: number, userId: string): 
       user_email
     `)
     .eq('id', orderIdNum)
-    .eq('user_id', userId) // Ensure the user owns this order
+    .eq('user_id', userId) 
     .single();
 
   if (orderError || !orderData) {
@@ -81,7 +88,13 @@ async function getOrderDetailsFromSupabase(orderIdNum: number, userId: string): 
 
 
 export async function generateMetadata({ params }: UserOrderDetailPageProps): Promise<Metadata> {
-  const supabase = createServerComponentClient({ cookies });
+  const supabase = createServerComponentClient<Database>(
+    { cookies },
+    {
+      supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      supabaseKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    }
+  );
   const { data: { user } } = await supabase.auth.getUser();
   console.log(`[generateMetadata /orders/${params.id}] User for metadata:`, user ? user.id : 'No user');
   
@@ -110,13 +123,21 @@ export async function generateMetadata({ params }: UserOrderDetailPageProps): Pr
 
 
 export default async function UserOrderDetailPage({ params }: UserOrderDetailPageProps) {
-  const cookieStore = cookies();
+  const cookieStore = cookies(); // Keep for logging
   console.log(`[UserOrderDetailPage /orders/${params.id}] All cookies visible to server component:`, JSON.stringify(cookieStore.getAll(), null, 2));
   
-  const supabase = createServerComponentClient({ cookies: () => cookieStore });
+  const supabase = createServerComponentClient<Database>(
+    { cookies }, // Pass cookies function directly
+    {
+      supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      supabaseKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    }
+  );
   
   console.log(`[UserOrderDetailPage /orders/${params.id}] Attempting to get user session...`);
   const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+  console.log(`[UserOrderDetailPage /orders/${params.id}] User object from supabase.auth.getUser():`, JSON.stringify(user, null, 2));
 
   if (authError) {
     console.error(
@@ -126,9 +147,8 @@ export default async function UserOrderDetailPage({ params }: UserOrderDetailPag
       'Full Error:', JSON.stringify(authError, null, 2)
     );
   }
-  console.log(`[UserOrderDetailPage /orders/${params.id}] User object from supabase.auth.getUser():`, JSON.stringify(user, null, 2));
 
-  if (!user) {
+  if (authError || !user) {
      console.log(`[UserOrderDetailPage /orders/${params.id}] No user found or auth error, redirecting to login.`);
     redirect('/login?message=Please login to view your order details.');
   }
