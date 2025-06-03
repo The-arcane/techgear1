@@ -62,7 +62,7 @@ export default function NewProductPage() {
         router.push('/admin/products'); 
         router.refresh(); // To ensure the product list is updated on the products page
       } else {
-        console.error("Add product error details:", result.errors || result.message);
+        console.error("Add product error details from API:", result.message, "Supabase Code:", result.supabase_code, "Supabase Details:", result.supabase_details, "Full API result:", result);
         const errorMsg = result.errors ? Object.values(result.errors).flat().join(', ') : result.message;
         toast({ title: "Error Adding Product", description: errorMsg || "An unknown error occurred.", variant: "destructive" });
       }

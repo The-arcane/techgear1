@@ -80,7 +80,16 @@ export async function POST(request: NextRequest) {
       if (error.message.toLowerCase().includes('violates row-level security policy') || error.message.toLowerCase().includes('permission denied')) {
         userFriendlyMessage = 'Product creation failed due to a security policy. Please ensure you have admin privileges and that Row Level Security (RLS) policies are correctly set up on the "products" table in Supabase to allow admin inserts. Specifically, check that your user ID is in the "admins" table if RLS relies on it.';
       } else if (error.code === '23505') { // Unique constraint violation
-        userFriendlyMessage = `Failed to add product: A product with similar unique details (e.g., name or ${error.details || 'another unique field'}) already exists.`;
+        let fieldInfo = "a unique field (e.g., name)";
+        if (error.details) {
+            const match = error.details.match(/Key \(([^)]+)\)=\(([^)]+)\) already exists./);
+            if (match && match[1]) {
+                fieldInfo = `the field '${match[1]}' with value '${match[2]}'`;
+            } else {
+                fieldInfo = `unique details (detail: ${error.details})`;
+            }
+        }
+        userFriendlyMessage = `Failed to add product: A product with similar ${fieldInfo} already exists.`;
         detailedError = `Database unique constraint (code: 23505) violated: ${error.details || error.message}`;
       } else if (error.code === '23502') { // Not-null violation
         userFriendlyMessage = `Failed to add product: A required field was missing or empty. Detail: ${error.details || error.message}.`;
