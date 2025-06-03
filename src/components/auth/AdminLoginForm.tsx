@@ -49,16 +49,16 @@ export function AdminLoginForm() {
         console.warn('[AdminLoginForm] Immediate getUser after signIn returned NO USER. Session likely not persisted in Preview Environment.');
       }
       
-      // Instead of checking admin status here, we'll let AdminPage handle it.
-      // This might help with iframe-specific issues where subsequent queries fail immediately after login.
       toast({ title: "Login Attempt Successful", description: "Redirecting to admin panel for verification..." });
+      // It's generally better to set isLoading false before navigation,
+      // in case navigation itself has issues or is delayed.
+      // If navigation is successful, the component unmounts anyway.
+      setIsLoading(false); 
       router.push('/admin');
-      router.refresh(); // Important to update server-side session state if applicable
-      // setIsLoading(false); // Let the navigation handle the loading state change
-      return; // Exit early
+      router.refresh(); 
+      return; 
 
     } else {
-      // This case should ideally not be hit if authError is null but no user/session
       setIsLoading(false);
       console.error("[AdminLoginForm] signInWithPassword returned no user/session despite no error. Preview Environment", authData);
       toast({ title: "Admin Login Failed", description: "Invalid email or password, or unexpected issue.", variant: "destructive" });
