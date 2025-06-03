@@ -2,6 +2,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { supabase } from '@/lib/supabaseClient';
+import crypto from 'crypto'; // Import crypto module
 
 const signupSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
@@ -21,7 +22,7 @@ export async function POST(request: Request) {
 
     const { name, email, password } = validation.data;
 
-    // --- Supabase Auth User Creation (Conceptual) ---
+    // --- Supabase Auth User Creation (Conceptual - Full Integration Recommended) ---
     // In a full Supabase setup, you'd first sign up the user with Supabase Auth:
     // const { data: authData, error: authError } = await supabase.auth.signUp({
     //   email: email,
@@ -41,23 +42,22 @@ export async function POST(request: Request) {
     // if (!authData.user) {
     //    return NextResponse.json({ success: false, message: "User not created after signup." }, { status: 500 });
     // }
-    // const userId = authData.user.id;
+    // const userId = authData.user.id; // This would be the REAL UUID from Supabase Auth
     // --- End Supabase Auth User Creation ---
     
-    // --- Simplified Profile Creation (using mock user ID for now if not using full Supabase Auth above) ---
+    // --- Simplified Profile Creation ---
     // For this example, we'll simulate inserting into the 'profiles' table.
     // In a real scenario, the 'id' for the profiles table should be the Supabase auth user's ID.
-    // If your 'profiles' table 'id' column is a foreign key to 'auth.users.id',
-    // and you've set up RLS, this insert might happen via a trigger or a security definer function.
+    // We are generating a valid UUID here to satisfy the column type.
+    // Ideally, this ID comes from the actual Supabase Auth user creation process shown above.
     
-    // This is a placeholder. The actual Supabase user ID would come from supabase.auth.signUp response.
-    const mockUserIdForProfile = `mock-uuid-${Date.now()}`; 
+    const userIdForProfile = crypto.randomUUID(); // Generate a valid UUID
 
     const { data: profileData, error: profileError } = await supabase
       .from('profiles')
       .insert([
         { 
-          id: mockUserIdForProfile, // Replace with actual userId from Supabase Auth
+          id: userIdForProfile, // Use the generated valid UUID
           full_name: name,
           // email: email, // profiles table doesn't have email based on your schema, email is in auth.users
           // phone_number: body.phone_number, // if you add these to form and schema
@@ -77,7 +77,7 @@ export async function POST(request: Request) {
     // For now, we'll return a generic success, as JWT/session management would be handled by Supabase client libraries
     return NextResponse.json({ 
       success: true, 
-      message: "User registered successfully (mock profile created). Please login.",
+      message: "User registered successfully (mock profile created with valid UUID). Please login.",
       // user: profileData ? profileData[0] : null // You might return the created profile
     }, { status: 201 });
 
