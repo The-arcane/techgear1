@@ -72,7 +72,7 @@ export default function AdminPage() {
           </CardContent>
         </Card>
         
-        <Card className="hover:shadow-lg transition-shadow opacity-50 cursor-not-allowed">
+        <Card className="hover:shadow-lg transition-shadow">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Users className="h-6 w-6 text-primary" />
@@ -81,11 +81,13 @@ export default function AdminPage() {
             <CardDescription>View and manage user accounts.</CardDescription>
           </CardHeader>
           <CardContent>
-            <Button className="w-full" variant="outline" disabled>Manage Users (Coming Soon)</Button>
+            <Link href="/admin/users">
+              <Button className="w-full">Manage Users</Button>
+            </Link>
           </CardContent>
         </Card>
 
-        <Card className="hover:shadow-lg transition-shadow opacity-50 cursor-not-allowed">
+        <Card className="hover:shadow-lg transition-shadow">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <LayoutGrid className="h-6 w-6 text-primary" />
@@ -94,11 +96,13 @@ export default function AdminPage() {
             <CardDescription>Add, edit, or delete categories.</CardDescription>
           </CardHeader>
           <CardContent>
-            <Button className="w-full" variant="outline" disabled>Manage Categories (Coming Soon)</Button>
+            <Link href="/admin/categories">
+              <Button className="w-full">Manage Categories</Button>
+            </Link>
           </CardContent>
         </Card>
 
-        <Card className="hover:shadow-lg transition-shadow opacity-50 cursor-not-allowed">
+        <Card className="hover:shadow-lg transition-shadow">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Settings className="h-6 w-6 text-primary" />
@@ -107,7 +111,9 @@ export default function AdminPage() {
             <CardDescription>Configure store preferences.</CardDescription>
           </CardHeader>
           <CardContent>
-            <Button className="w-full" variant="outline" disabled>Configure Settings (Coming Soon)</Button>
+            <Link href="/admin/settings">
+              <Button className="w-full">Configure Settings</Button>
+            </Link>
           </CardContent>
         </Card>
       </div>
