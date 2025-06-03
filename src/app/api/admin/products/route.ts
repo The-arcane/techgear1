@@ -70,10 +70,15 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error) {
-      console.error('Supabase error creating product:', error);
-      // Check for RLS violation specifically
-      if (error.message.includes('new row violates row-level security policy')) {
-          return NextResponse.json({ success: false, message: 'Failed to add product. Please ensure you have admin privileges and RLS policies are correctly set up on the "products" table in Supabase to allow admin inserts.', error: error.message }, { status: 500 });
+      console.error('Supabase error creating product:', JSON.stringify(error, null, 2)); // Log the full error object
+      console.log('Checking error message for RLS policy violation. Error message:', error.message);
+
+      if (error.message.toLowerCase().includes('violates row-level security policy') || error.message.toLowerCase().includes('permission denied')) {
+          return NextResponse.json({ 
+            success: false, 
+            message: 'Product creation failed due to a security policy. Please ensure you have admin privileges and that Row Level Security (RLS) policies are correctly set up on the "products" table in Supabase to allow admin inserts. Specifically, check that your user ID is in the "admins" table if RLS relies on it.', 
+            error: error.message 
+          }, { status: 500 });
       }
       return NextResponse.json({ success: false, message: 'Failed to add product to database.', error: error.message }, { status: 500 });
     }
