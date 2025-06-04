@@ -60,7 +60,6 @@ export function CheckoutForm() {
 
     console.log('[CheckoutForm] Attempting to place order for User ID (from auth.users.id):', user.id, 'User email:', user.email);
 
-    // Check if a profile exists for this user
     const { data: profileData, error: profileFetchError } = await supabase
       .from('profiles')
       .select('id')
@@ -88,14 +87,17 @@ export function CheckoutForm() {
 
     console.log('[CheckoutForm] User profile confirmed for ID:', user.id);
 
+    let newOrderId: number | null = null;
+    // Removed stockUpdateErrorOccurred and stockUpdateErrorDetails as stock update is now DB-side
+
     try {
       const orderToInsert: SupabaseOrderInsert = {
         user_id: user.id, 
         user_email: user.email || '', 
         shipping_address: shippingAddress,
         total_amount: getCartTotal(),
-        status: 'Pending', // Default status from your DB schema
-        payment_mode: 'COD', // Default payment_mode from your DB schema
+        status: 'Pending',
+        payment_mode: 'COD',
       };
       
       console.log('[CheckoutForm] Order object being inserted into "orders" table:', JSON.stringify(orderToInsert, null, 2));
@@ -112,29 +114,29 @@ export function CheckoutForm() {
         console.error('[CheckoutForm] Error creating order. orderError object:', JSON.stringify(orderError, null, 2), 'newOrderData:', newOrderData);
         let description = orderError?.message || "Could not save the order.";
         
-        if (orderError?.code === '42501') { // Specific RLS violation code
-            description = `Order placement failed due to a Row Level Security policy on the "orders" table. Please ensure an INSERT policy allows authenticated users to add orders for themselves (i.e., WITH CHECK (auth.uid() = user_id)). Original DB message: ${orderError.message}`;
+        if (orderError?.code === '42501' || (orderError?.message && orderError.message.toLowerCase().includes('row level security policy'))) {
+            description = `Order placement failed due to a Row Level Security policy on the "orders" table. Please ensure an INSERT policy allows authenticated users to add orders for themselves. Original DB message: ${orderError.message}`;
         } else if (orderError?.message && orderError.message.includes("orders_user_id_fkey")) {
-          description = "Order placement failed: The user's profile was not found. This usually means the database trigger to create a profile automatically when a user signs up is missing, not working, or the current user was created before the trigger was active. Please ensure a profile record exists for your user ID in the 'profiles' table, and check the database trigger setup.";
-        } else if (!orderError?.message) {
-            description += " Ensure all required fields are correct and columns exist as expected in your 'orders' table.";
+          description = "Order placement failed: The user's profile was not found or could not be linked. Please ensure a profile record exists for your user ID in the 'profiles' table, and check database triggers/constraints.";
         }
         toast({ title: "Order Placement Failed", description, variant: "destructive", duration: 15000 });
         setIsLoading(false);
         return;
       }
 
-      const newOrderId = newOrderData.id;
+      newOrderId = newOrderData.id;
       console.log('[CheckoutForm] Order created successfully with ID:', newOrderId);
 
       const orderItemsToInsert: SupabaseOrderItemInsert[] = [];
-      let stockUpdateErrorOccurred = false;
-
+      
       for (const item of cartItems) {
         const productIdInt = parseInt(item.productId, 10);
         if (isNaN(productIdInt)) {
             console.error(`[CheckoutForm] Invalid product ID for item ${item.name}: ${item.productId}. Skipping item.`);
-            stockUpdateErrorOccurred = true; 
+            // If an item is invalid, we might want to roll back the whole order or handle it more gracefully.
+            // For now, this will cause the order_items insert to potentially have fewer items.
+            // Or, we could throw an error here and trigger the catch block to delete the order.
+            toast({ title: "Order Item Error", description: `Invalid product ID encountered: ${item.productId}. This item was not added.`, variant: "destructive", duration: 10000 });
             continue; 
         }
 
@@ -144,45 +146,11 @@ export function CheckoutForm() {
           quantity: item.quantity,
           price_at_time: item.price,
         });
-
-        const { data: productData, error: productFetchError } = await supabase
-          .from('products')
-          .select('stock')
-          .eq('id', productIdInt)
-          .single();
-
-        if (productFetchError || !productData) {
-          console.error(`[CheckoutForm] Error fetching stock for product ID ${productIdInt}:`, JSON.stringify(productFetchError, null, 2));
-          stockUpdateErrorOccurred = true; 
-          continue; 
-        }
-
-        const currentStock = productData.stock || 0;
-        const newStock = currentStock - item.quantity;
-
-        if (newStock < 0) {
-          console.warn(`[CheckoutForm] Product ID ${productIdInt} stock (${currentStock}) is less than quantity ordered (${item.quantity}). Clamping stock to 0.`);
-          const { error: stockClampError } = await supabase
-            .from('products')
-            .update({ stock: 0 })
-            .eq('id', productIdInt);
-          if (stockClampError) {
-            console.error(`[CheckoutForm] Error clamping stock for product ID ${productIdInt}:`, JSON.stringify(stockClampError, null, 2));
-            stockUpdateErrorOccurred = true;
-          }
-          continue; 
-        }
-        
-        const { error: stockUpdateDbError } = await supabase
-          .from('products')
-          .update({ stock: newStock })
-          .eq('id', productIdInt);
-
-        if (stockUpdateDbError) {
-          console.error(`[CheckoutForm] Error updating stock for product ID ${productIdInt}:`, JSON.stringify(stockUpdateDbError, null, 2));
-          stockUpdateErrorOccurred = true; 
-        }
       }
+
+      // REMOVED: Client-side stock fetch and update logic.
+      // The database trigger 'handle_order_item_insert_stock_update'
+      // will now handle decrementing stock when order_items are inserted.
 
       if (orderItemsToInsert.length > 0) {
         const { error: orderItemsError } = await supabase
@@ -190,36 +158,48 @@ export function CheckoutForm() {
             .insert(orderItemsToInsert);
 
         if (orderItemsError) {
+            // If inserting order_items fails, the trigger for stock update won't fire correctly.
+            // We should roll back the order.
             console.error('[CheckoutForm] Error creating order items:', JSON.stringify(orderItemsError, null, 2));
-            toast({ title: "Order Items Failed", description: (orderItemsError as any)?.message || "Could not save order items.", variant: "destructive" });
-            await supabase.from('orders').delete().eq('id', newOrderId); // Attempt to rollback order
+            toast({ title: "Order Items Failed", description: (orderItemsError as any)?.message || "Could not save order items. Rolling back order.", variant: "destructive" });
+            if (newOrderId) {
+                 console.log(`[CheckoutForm] Attempting to delete order ${newOrderId} due to order_items insertion failure.`);
+                 await supabase.from('orders').delete().eq('id', newOrderId);
+                 console.log(`[CheckoutForm] Order ${newOrderId} deleted.`);
+            }
             setIsLoading(false);
             return;
         }
+         console.log(`[CheckoutForm] Successfully inserted ${orderItemsToInsert.length} order items for order ID ${newOrderId}. Stock updates will be handled by database trigger.`);
       } else if (cartItems.length > 0) { 
-          console.error('[CheckoutForm] No valid order items could be prepared. Rolling back order.');
-          toast({ title: "Order Failed", description: "No items could be processed for the order.", variant: "destructive" });
-          await supabase.from('orders').delete().eq('id', newOrderId);
+          // This case means all items in cart might have had invalid product IDs
+          console.error('[CheckoutForm] No valid order items could be prepared from cart. Rolling back order.');
+          toast({ title: "Order Failed", description: "No valid items could be processed for the order.", variant: "destructive" });
+          if (newOrderId) {
+            console.log(`[CheckoutForm] Attempting to delete order ${newOrderId} due to no valid items.`);
+            await supabase.from('orders').delete().eq('id', newOrderId);
+            console.log(`[CheckoutForm] Order ${newOrderId} deleted.`);
+          }
           setIsLoading(false);
           return;
       }
 
-
-      if (stockUpdateErrorOccurred) {
-        toast({ title: "Order Placed with Issues", description: `Order #${newOrderId} created, but some stock updates or item processing may have failed. Please check admin panel or contact support.`, variant: "default", duration: 10000 });
-      } else {
-        toast({ title: "Order Placed!", description: `Your order #${newOrderId} has been successfully placed.` });
-      }
-
+      toast({ title: "Order Placed!", description: `Your order #${newOrderId} has been successfully placed. Stock will be updated automatically.` });
+      
       clearCart();
-      setIsLoading(false);
       router.push(`/order-confirmation/${newOrderId}`);
       router.refresh();
 
-    } catch (error) {
+    } catch (error) { 
       console.error('[CheckoutForm] Checkout process error:', error instanceof Error ? error.message : JSON.stringify(error));
       toast({ title: "Checkout Error", description: error instanceof Error ? error.message : "An unexpected error occurred during checkout.", variant: "destructive" });
-      setIsLoading(false);
+      if (newOrderId) { 
+          console.log(`[CheckoutForm] Attempting to delete order ${newOrderId} due to unexpected error in try-catch block.`);
+          await supabase.from('orders').delete().eq('id', newOrderId);
+          console.log(`[CheckoutForm] Order ${newOrderId} deleted.`);
+      }
+    } finally {
+        setIsLoading(false);
     }
   };
 
@@ -284,4 +264,3 @@ export function CheckoutForm() {
     </form>
   );
 }
-
