@@ -46,7 +46,7 @@ export function Header() {
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [isAdminUser, setIsAdminUser] = useState(false);
   const [userName, setUserName] = useState<string | null>(null);
-  const [isLoadingAuth, setIsLoadingAuth] = useState(true);
+  const [isLoadingAuth, setIsLoadingAuth] = useState(true); 
   const initialAuthCheckDone = useRef(false);
   const isMounted = useRef(false);
   
@@ -54,11 +54,22 @@ export function Header() {
 
   useEffect(() => {
     isMounted.current = true;
-    console.log("Header: useEffect mounted. isLoadingAuth initially:", isLoadingAuth);
-    // setIsLoadingAuth(true) is already default
+    console.log("[Header] ComponentDidMount: isMounted.current = true");
+    return () => {
+      isMounted.current = false;
+      console.log("[Header] ComponentWillUnmount: isMounted.current = false");
+    };
+  }, []);
+
+  useEffect(() => {
+    console.log("[Header] AuthEffect: RUNNING. Current isLoadingAuth:", isLoadingAuth, "initialAuthCheckDone:", initialAuthCheckDone.current);
 
     const fetchUserDetails = async (user: AuthUser) => {
-      if (!isMounted.current) return;
+      if (!isMounted.current) {
+        console.log("[Header] AuthEffect (fetchUserDetails): NOT MOUNTED, skipping fetch.");
+        return;
+      }
+      console.log("[Header] AuthEffect (fetchUserDetails): Fetching details for user:", user.id);
       try {
         const { data: profileData, error: profileError } = await supabase
           .from('profiles')
@@ -68,9 +79,11 @@ export function Header() {
 
         if (!isMounted.current) return;
         if (profileError && profileError.code !== 'PGRST116') {
-          console.error("Header: Error fetching profile:", profileError.message);
+          console.error("[Header] AuthEffect (fetchUserDetails): Error fetching profile:", profileError.message);
         }
-        setUserName(profileData?.full_name || user.user_metadata?.full_name || user.email?.split('@')[0] || "User");
+        const nameToSet = profileData?.full_name || user.user_metadata?.full_name || user.email?.split('@')[0] || "User";
+        console.log("[Header] AuthEffect (fetchUserDetails): Setting userName to:", nameToSet);
+        setUserName(nameToSet);
 
         const { data: adminData, error: adminError } = await supabase
           .from('admins')
@@ -80,75 +93,63 @@ export function Header() {
         
         if (!isMounted.current) return;
         if (adminError) {
-          console.error("Header: Error checking admin status:", adminError.message);
+          console.error("[Header] AuthEffect (fetchUserDetails): Error checking admin status:", adminError.message);
           setIsAdminUser(false);
         } else {
-          setIsAdminUser(!!adminData);
+          const isAdmin = !!adminData;
+          console.log("[Header] AuthEffect (fetchUserDetails): Setting isAdminUser to:", isAdmin);
+          setIsAdminUser(isAdmin);
         }
       } catch (e: any) {
         if (!isMounted.current) return;
-        console.error("Header: Unexpected error in fetchUserDetails:", e.message);
-        setUserName(user.email?.split('@')[0] || "User"); 
+        console.error("[Header] AuthEffect (fetchUserDetails): Unexpected error:", e.message);
+        const fallbackName = user.email?.split('@')[0] || "User";
+        console.log("[Header] AuthEffect (fetchUserDetails): Setting fallback userName to:", fallbackName);
+        setUserName(fallbackName); 
         setIsAdminUser(false);
       }
     };
     
-    const handleUserSession = async (user: AuthUser | null) => {
-      if (!isMounted.current) return;
+    const handleUserSession = (user: AuthUser | null, source: string) => {
+      if (!isMounted.current) {
+         console.log(`[Header] AuthEffect (${source}): NOT MOUNTED, skipping user session handling.`);
+        return;
+      }
+      console.log(`[Header] AuthEffect (${source}): Setting authUser to:`, user?.id || null);
       setAuthUser(user);
       if (user) {
-        await fetchUserDetails(user);
+        fetchUserDetails(user); // fetchUserDetails is async but we don't need to await it here
       } else {
+        console.log(`[Header] AuthEffect (${source}): No user, clearing userName and isAdminUser.`);
         setUserName(null);
         setIsAdminUser(false);
       }
-      // Set loading to false only after the first auth check is done
+
       if (!initialAuthCheckDone.current) {
         setIsLoadingAuth(false);
         initialAuthCheckDone.current = true;
-        console.log("Header: Initial auth check complete, isLoadingAuth set to false.");
-      }
-    };
-
-    // Perform initial auth check
-    const performInitialAuthSetup = async () => {
-      console.log("Header: Performing initial auth setup.");
-      try {
-        // Check if already loading to prevent race conditions if effect re-runs quickly
-        if (isMounted.current && !initialAuthCheckDone.current) {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (isMounted.current) { // Re-check after await
-                 console.log("Header (initial getSession): Session user:", session ? session.user.id : "null");
-                await handleUserSession(session?.user ?? null);
-            }
-        }
-      } catch (e:any) {
-        if (isMounted.current) {
-            console.error("Header (initial auth setup error):", e.message);
-            await handleUserSession(null); 
-        }
-      }
-    };
-
-    performInitialAuthSetup();
-
-    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (!isMounted.current) return;
-      console.log("Header: onAuthStateChange event:", event, "Session user:", session?.user?.id || "null");
-      // Don't set isLoadingAuth here, only update user details.
-      // It's handled by initialAuthCheckDone.
-      setAuthUser(session?.user ?? null);
-      if (session?.user) {
-        await fetchUserDetails(session.user);
+        console.log(`[Header] AuthEffect (${source}): FIRST auth determination. setIsLoadingAuth(false) CALLED. initialAuthCheckDone = true.`);
       } else {
-        setUserName(null);
-        setIsAdminUser(false);
+         console.log(`[Header] AuthEffect (${source}): Subsequent auth update. isLoadingAuth remains:`, isLoadingAuth);
       }
+    };
+    
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      console.log("[Header] AuthEffect (getSession.then): Initial session User ID:", session?.user?.id || "None");
+      handleUserSession(session?.user ?? null, "getSession.then");
+    }).catch((err) => {
+      if (!isMounted.current) return;
+      console.error("[Header] AuthEffect (getSession.catch): Error:", err.message);
+      handleUserSession(null, "getSession.catch");
+    });
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log("[Header] AuthEffect (onAuthStateChange): Event:", event, "Session User ID:", session?.user?.id || "None");
+      handleUserSession(session?.user ?? null, `onAuthStateChange(${event})`);
     });
 
     return () => {
-      isMounted.current = false;
-      console.log("Header: useEffect cleanup. Unsubscribing auth listener.");
+      console.log("[Header] AuthEffect: CLEANUP. Unsubscribing auth listener.");
       authListener?.subscription.unsubscribe();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -158,19 +159,21 @@ export function Header() {
   const closeMobileMenu = () => setIsMobileMenuOpen(false);
 
   const handleLogout = async () => {
-    // Don't set isLoadingAuth true here, as it's for initial load state
+    console.log("[Header] handleLogout: Attempting logout.");
     const { error } = await supabase.auth.signOut();
-    closeMobileMenu(); // Closes mobile menu first
+    closeMobileMenu(); 
     if (error) {
+      console.error("[Header] handleLogout: Logout failed:", error.message);
       toast({ title: "Logout Failed", description: error.message, variant: "destructive" });
     } else {
+      console.log("[Header] handleLogout: Logout successful.");
       toast({ title: "Logged Out", description: "You have been successfully logged out." });
-      // Auth state (authUser, userName, isAdminUser) will be updated by onAuthStateChange
     }
     router.push('/login'); 
     router.refresh(); 
   };
   
+  console.log("[Header] RENDER: isLoadingAuth:", isLoadingAuth, "authUser:", authUser?.id || null, "userName:", userName);
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -279,7 +282,7 @@ export function Header() {
               </SheetTrigger>
               <SheetContent side="right" className="w-[300px] sm:w-[400px] bg-background overflow-y-auto">
                 <SheetHeader className="p-6 pb-0 flex flex-row items-center justify-between">
-                   <SheetTitle className="sr-only">Mobile Menu</SheetTitle> {/* Visually hidden title */}
+                   <SheetTitle className="sr-only">Mobile Menu</SheetTitle> 
                    <Logo />
                    <SheetTrigger asChild>
                      <Button variant="ghost" size="icon" onClick={closeMobileMenu} className="-mr-2">
